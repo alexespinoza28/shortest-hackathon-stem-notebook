@@ -152,6 +152,8 @@ export function getNotebookContent(id: string): NotebookContent | null {
       ],
       currentPageId: pageId,
     }
+    // Save the default content so it's consistent across renders
+    localStorage.setItem(`notebook-${id}`, JSON.stringify(defaultContent))
     return defaultContent
   }
 
