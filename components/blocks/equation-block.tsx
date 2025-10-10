@@ -184,8 +184,15 @@ export function EquationBlock({
       // Split by newlines to handle multi-line input
       const lines = text.split('\n').filter(l => l.trim())
 
-      // If single line, convert normally
+      // If single line, convert normally without aligned wrapper
       if (lines.length === 1) {
+        const lineIsLatex = isLikelyLatex(lines[0])
+        const lineIsValid = lineIsLatex ? isValidLatex(lines[0]) : false
+
+        if (lineIsLatex && lineIsValid) {
+          return lines[0] // Already valid LaTeX
+        }
+
         const response = await fetch("/api/latex-convert", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -198,7 +205,7 @@ export function EquationBlock({
         return data.latex || text
       }
 
-      // Multi-line: convert each line and use aligned environment
+      // Multi-line: convert each line individually
       const convertedLines = await Promise.all(
         lines.map(async (line) => {
           // Check if this line needs conversion
@@ -223,8 +230,8 @@ export function EquationBlock({
         })
       )
 
-      // Use aligned environment for proper spacing and left alignment
-      return `\\begin{aligned}\n${convertedLines.join(' \\\\\n')}\n\\end{aligned}`
+      // Just join lines with newline - we'll render each separately
+      return convertedLines.join('\n')
     } catch (error) {
       console.error("LaTeX conversion error:", error)
       return text
@@ -367,7 +374,11 @@ export function EquationBlock({
             className="cursor-move hover:bg-accent/30 rounded-lg p-2 transition-colors select-none"
           >
             {content ? (
-              <BlockMath math={content} />
+              <div className="flex flex-col gap-2">
+                {content.split('\n').filter(line => line.trim()).map((line, idx) => (
+                  <BlockMath key={idx} math={line} />
+                ))}
+              </div>
             ) : (
               <p className="text-muted-foreground italic text-sm bg-card/50 backdrop-blur-sm rounded p-2">
                 Click to add equation
