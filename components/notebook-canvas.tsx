@@ -35,6 +35,16 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
   const [blocks, setBlocks] = useState<Block[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
 
+  // Multi-select state
+  const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(new Set())
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+  const [isSelecting, setIsSelecting] = useState(false)
+
   // Load blocks from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem(`notebook-${notebookId}`)
@@ -60,6 +70,36 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     // Update notebook metadata timestamp
     updateNotebook(notebookId, { updatedAt: Date.now() })
   }, [blocks, notebookId, isLoaded])
+
+  // Keyboard shortcuts for multi-select
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd+A to select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault()
+        setSelectedBlocks(new Set(blocks.map(b => b.id)))
+      }
+
+      // Escape to deselect all
+      if (e.key === 'Escape') {
+        setSelectedBlocks(new Set())
+      }
+
+      // Delete key to delete selected blocks
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBlocks.size > 0) {
+        // Only delete if not focused on an input
+        if (document.activeElement?.tagName !== 'INPUT' &&
+            document.activeElement?.tagName !== 'TEXTAREA') {
+          e.preventDefault()
+          setBlocks(blocks.filter(b => !selectedBlocks.has(b.id)))
+          setSelectedBlocks(new Set())
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [blocks, selectedBlocks])
 
   const handleInsert = (type: string) => {
     const newBlock: Block = {
@@ -92,12 +132,236 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     setBlocks(blocks.filter((block) => block.id !== id))
   }
 
-  const handleBlockMove = (id: string, position: { x: number; y: number }) => {
-    setBlocks(blocks.map((block) => (block.id === id ? { ...block, position } : block)))
+  const handleBlockMove = (id: string, newPosition: { x: number; y: number }) => {
+    // If the moved block is selected, move all selected blocks
+    if (selectedBlocks.has(id)) {
+      const movingBlock = blocks.find(b => b.id === id)
+      if (!movingBlock) return
+
+      const dx = newPosition.x - movingBlock.position.x
+      const dy = newPosition.y - movingBlock.position.y
+
+      setBlocks(blocks.map((block) => {
+        if (selectedBlocks.has(block.id)) {
+          return {
+            ...block,
+            position: {
+              x: block.position.x + dx,
+              y: block.position.y + dy,
+            },
+          }
+        }
+        return block
+      }))
+    } else {
+      // Move single block
+      setBlocks(blocks.map((block) => (block.id === id ? { ...block, position: newPosition } : block)))
+    }
   }
 
-  const handleBlockScale = (id: string, scale: number) => {
-    setBlocks(blocks.map((block) => (block.id === id ? { ...block, scale } : block)))
+  const handleBlockScale = (id: string, newScale: number) => {
+    // If the scaled block is selected, scale all selected blocks
+    if (selectedBlocks.has(id)) {
+      const scalingBlock = blocks.find(b => b.id === id)
+      if (!scalingBlock) return
+
+      const scaleRatio = newScale / scalingBlock.scale
+
+      setBlocks(blocks.map((block) => {
+        if (selectedBlocks.has(block.id)) {
+          return {
+            ...block,
+            scale: block.scale * scaleRatio,
+          }
+        }
+        return block
+      }))
+    } else {
+      // Scale single block
+      setBlocks(blocks.map((block) => (block.id === id ? { ...block, scale: newScale } : block)))
+    }
+  }
+
+  // Handle dragging selected blocks as a group
+  const handleSelectionDragStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const startX = e.clientX
+    const startY = e.clientY
+
+    // Store initial positions of all selected blocks
+    const initialPositions = new Map(
+      blocks.filter(b => selectedBlocks.has(b.id)).map(b => [b.id, { ...b.position }])
+    )
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+
+      setBlocks(prevBlocks =>
+        prevBlocks.map(block => {
+          if (selectedBlocks.has(block.id)) {
+            const initial = initialPositions.get(block.id)
+            if (initial) {
+              return {
+                ...block,
+                position: {
+                  x: initial.x + dx,
+                  y: initial.y + dy,
+                },
+              }
+            }
+          }
+          return block
+        })
+      )
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Handle resizing all selected blocks together
+  const handleSelectionResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const startX = e.clientX
+    const startY = e.clientY
+
+    // Store initial scales of all selected blocks
+    const initialScales = new Map(
+      blocks.filter(b => selectedBlocks.has(b.id)).map(b => [b.id, b.scale])
+    )
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+
+      // Calculate scale factor based on diagonal movement
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      const direction = dx + dy > 0 ? 1 : -1
+      const scaleFactor = 1 + (direction * distance) / 200
+
+      setBlocks(prevBlocks =>
+        prevBlocks.map(block => {
+          if (selectedBlocks.has(block.id)) {
+            const initialScale = initialScales.get(block.id) || 1
+            return {
+              ...block,
+              scale: Math.max(0.5, Math.min(3, initialScale * scaleFactor)),
+            }
+          }
+          return block
+        })
+      )
+    }
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+
+  // Selection box handlers
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only start selection if clicking directly on canvas (not on blocks)
+    if (e.target === e.currentTarget) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+
+      setIsSelecting(true)
+      setSelectionBox({
+        startX: x,
+        startY: y,
+        currentX: x,
+        currentY: y,
+      })
+
+      // Clear selection if not holding shift
+      if (!e.shiftKey) {
+        setSelectedBlocks(new Set())
+      }
+    }
+  }
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isSelecting && selectionBox) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+
+      setSelectionBox({
+        ...selectionBox,
+        currentX: x,
+        currentY: y,
+      })
+    }
+  }
+
+  const handleCanvasMouseUp = () => {
+    if (isSelecting && selectionBox) {
+      // Calculate selection rectangle
+      const minX = Math.min(selectionBox.startX, selectionBox.currentX)
+      const maxX = Math.max(selectionBox.startX, selectionBox.currentX)
+      const minY = Math.min(selectionBox.startY, selectionBox.currentY)
+      const maxY = Math.max(selectionBox.startY, selectionBox.currentY)
+
+      // Find blocks that intersect with selection box
+      const newSelected = new Set(selectedBlocks)
+      blocks.forEach((block) => {
+        // Approximate block size (you can refine this based on actual block dimensions)
+        const blockWidth = 200
+        const blockHeight = 100
+
+        const blockRight = block.position.x + blockWidth
+        const blockBottom = block.position.y + blockHeight
+
+        // Check if block intersects with selection box
+        const intersects = !(
+          block.position.x > maxX ||
+          blockRight < minX ||
+          block.position.y > maxY ||
+          blockBottom < minY
+        )
+
+        if (intersects) {
+          newSelected.add(block.id)
+        }
+      })
+
+      setSelectedBlocks(newSelected)
+      setIsSelecting(false)
+      setSelectionBox(null)
+    }
+  }
+
+  // Handle clicking on a block (for shift+click to toggle selection)
+  const handleBlockClick = (id: string, e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      e.preventDefault()
+      e.stopPropagation()
+      const newSelected = new Set(selectedBlocks)
+      if (newSelected.has(id)) {
+        newSelected.delete(id)
+      } else {
+        newSelected.add(id)
+      }
+      setSelectedBlocks(newSelected)
+    } else {
+      // Clear selection when clicking a single block
+      setSelectedBlocks(new Set())
+    }
   }
 
   return (
@@ -127,6 +391,10 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
           <div className="w-full min-h-full">
             <div
               className="bg-card border-2 border-primary rounded-lg shadow-lg min-h-[2000px] relative pb-20"
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseUp}
               onDoubleClick={(e) => {
                 if (e.target === e.currentTarget) {
                   const rect = e.currentTarget.getBoundingClientRect()
@@ -156,6 +424,26 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                 }}
               />
 
+              {/* Selection box */}
+              {isSelecting && selectionBox && (
+                <div
+                  className="absolute border-2 border-primary bg-primary/10 pointer-events-none z-50"
+                  style={{
+                    left: Math.min(selectionBox.startX, selectionBox.currentX),
+                    top: Math.min(selectionBox.startY, selectionBox.currentY),
+                    width: Math.abs(selectionBox.currentX - selectionBox.startX),
+                    height: Math.abs(selectionBox.currentY - selectionBox.startY),
+                  }}
+                />
+              )}
+
+              {/* Selection count indicator */}
+              {selectedBlocks.size > 0 && (
+                <div className="absolute top-4 right-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium z-50">
+                  {selectedBlocks.size} block{selectedBlocks.size !== 1 ? 's' : ''} selected
+                </div>
+              )}
+
               {/* Placeholder when no blocks */}
               {blocks.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -164,6 +452,82 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                   </p>
                 </div>
               )}
+
+              {/* Selection highlight box (single box around all selected blocks) */}
+              {(() => {
+                const selectedBlocksList = blocks.filter(b => selectedBlocks.has(b.id))
+                if (selectedBlocksList.length === 0) return null
+
+                // Calculate bounding box of all selected blocks
+                const BLOCK_WIDTH = 300
+                const BLOCK_HEIGHT = 150
+
+                let minX = Infinity
+                let minY = Infinity
+                let maxX = -Infinity
+                let maxY = -Infinity
+
+                selectedBlocksList.forEach(block => {
+                  const scaledWidth = BLOCK_WIDTH * block.scale
+                  const scaledHeight = BLOCK_HEIGHT * block.scale
+
+                  minX = Math.min(minX, block.position.x)
+                  minY = Math.min(minY, block.position.y)
+                  maxX = Math.max(maxX, block.position.x + scaledWidth)
+                  maxY = Math.max(maxY, block.position.y + scaledHeight)
+                })
+
+                const bounds = {
+                  x: minX - 8,
+                  y: minY - 8,
+                  width: maxX - minX + 16,
+                  height: maxY - minY + 16,
+                }
+
+                return (
+                  <div
+                    key="selection-box"
+                    className="absolute rounded-lg ring-4 ring-primary/50 bg-primary/5 cursor-move"
+                    onMouseDown={handleSelectionDragStart}
+                    style={{
+                      left: bounds.x,
+                      top: bounds.y,
+                      width: bounds.width,
+                      height: bounds.height,
+                    }}
+                  >
+                    {/* Corner resize handles */}
+                    <div
+                      className="absolute bottom-0 right-0 w-4 h-4 bg-primary rounded-full cursor-se-resize hover:scale-125 transition-transform"
+                      onMouseDown={handleSelectionResizeStart}
+                      style={{
+                        transform: 'translate(50%, 50%)',
+                      }}
+                    />
+                    <div
+                      className="absolute top-0 left-0 w-4 h-4 bg-primary rounded-full cursor-nw-resize hover:scale-125 transition-transform"
+                      onMouseDown={handleSelectionResizeStart}
+                      style={{
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    />
+                    <div
+                      className="absolute top-0 right-0 w-4 h-4 bg-primary rounded-full cursor-ne-resize hover:scale-125 transition-transform"
+                      onMouseDown={handleSelectionResizeStart}
+                      style={{
+                        transform: 'translate(50%, -50%)',
+                      }}
+                    />
+                    <div
+                      className="absolute bottom-0 left-0 w-4 h-4 bg-primary rounded-full cursor-sw-resize hover:scale-125 transition-transform"
+                      onMouseDown={handleSelectionResizeStart}
+                      style={{
+                        transform: 'translate(-50%, 50%)',
+                      }}
+                    />
+                  </div>
+                )
+              })()}
 
               {/* Render blocks */}
               {blocks.map((block) => {
