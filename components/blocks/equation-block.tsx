@@ -154,36 +154,24 @@ export function EquationBlock({
     return latexPatterns.some(pattern => pattern.test(text))
   }
 
-  // Check if LaTeX is valid by trying to parse it
+  // Check if LaTeX is valid by trying to parse it with KaTeX
   const isValidLatex = (text: string): boolean => {
     if (!text.trim()) return false
 
-    // Check for natural language keywords that shouldn't be in pure LaTeX
-    const naturalLanguageKeywords = [
-      /\bplus\b/i,
-      /\bminus\b/i,
-      /\btimes\b/i,
-      /\bover\b/i,
-      /\bdivided by\b/i,
-      /\bintegral of\b/i,
-      /\bsum of\b/i,
-      /\bsquare root of\b/i,
-      /\bfraction\b/i,
-      /\bfrom\b/i,
-      /\bto\b/i,
-      /\bequals\b/i,
-    ]
+    // Check for common English words that indicate natural language
+    // Use word boundaries to avoid false positives
+    const englishWords = /\b(plus|minus|times|divided|over|of|the|from|to|squared|cubed|root|power|integral|derivative|limit|equals|and|or)\b/i
 
-    // If it contains natural language keywords, it's invalid
-    if (naturalLanguageKeywords.some(pattern => pattern.test(text))) {
-      return false
+    if (englishWords.test(text)) {
+      return false // Contains natural language
     }
 
     try {
-      // Try to render it (this will throw if invalid)
+      // Try to render it - if KaTeX can parse it, it's valid LaTeX
       katex.renderToString(text, { throwOnError: true })
       return true
     } catch (e) {
+      // If KaTeX can't parse it, it's either broken LaTeX or natural language
       return false
     }
   }
@@ -194,11 +182,25 @@ export function EquationBlock({
     setIsConverting(true)
     try {
       // Split by newlines to handle multi-line input
-      const lines = text.split('\n')
+      const lines = text.split('\n').filter(l => l.trim())
+
+      // If single line, convert normally
+      if (lines.length === 1) {
+        const response = await fetch("/api/latex-convert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: lines[0] }),
+        })
+
+        if (!response.ok) throw new Error("Conversion failed")
+
+        const data = await response.json()
+        return data.latex || text
+      }
+
+      // Multi-line: convert each line and use aligned environment
       const convertedLines = await Promise.all(
         lines.map(async (line) => {
-          if (!line.trim()) return '' // Empty line
-
           // Check if this line needs conversion
           const lineIsLatex = isLikelyLatex(line)
           const lineIsValid = lineIsLatex ? isValidLatex(line) : false
@@ -221,8 +223,8 @@ export function EquationBlock({
         })
       )
 
-      // Join with LaTeX line break
-      return convertedLines.filter(l => l.trim()).join(' \\\\ ')
+      // Use aligned environment for proper spacing and left alignment
+      return `\\begin{aligned}\n${convertedLines.join(' \\\\\n')}\n\\end{aligned}`
     } catch (error) {
       console.error("LaTeX conversion error:", error)
       return text
@@ -238,19 +240,17 @@ export function EquationBlock({
       return
     }
 
-    // Only convert if:
-    // 1. Content has changed
-    // 2. Either content doesn't look like LaTeX OR LaTeX is broken
     const hasChanged = content !== originalContentRef.current
-    const looksLikeLatex = isLikelyLatex(content)
-    const latexIsValid = looksLikeLatex ? isValidLatex(content) : false
 
-    console.log('Blur check:', { hasChanged, content, original: originalContentRef.current, looksLikeLatex, latexIsValid })
+    // For multi-line content, check if ANY line needs conversion
+    const lines = content.split('\n').filter(l => l.trim())
+    const needsConversion = hasChanged && lines.some(line => {
+      const lineIsLatex = isLikelyLatex(line)
+      const lineIsValid = lineIsLatex ? isValidLatex(line) : false
+      return !lineIsLatex || !lineIsValid
+    })
 
-    // Convert if changed and (not latex-like OR latex is broken)
-    const needsConversion = hasChanged && (!looksLikeLatex || !latexIsValid)
-
-    console.log('Need conversion?', needsConversion)
+    console.log('Blur check:', { hasChanged, content, original: originalContentRef.current, needsConversion })
 
     if (needsConversion) {
       // Auto-convert natural language to LaTeX
@@ -273,17 +273,17 @@ export function EquationBlock({
         return
       }
 
-      // Only convert if content has changed and (not latex-like OR latex is broken)
       const hasChanged = content !== originalContentRef.current
-      const looksLikeLatex = isLikelyLatex(content)
-      const latexIsValid = looksLikeLatex ? isValidLatex(content) : false
 
-      console.log('Enter check:', { hasChanged, content, original: originalContentRef.current, looksLikeLatex, latexIsValid })
+      // For multi-line content, check if ANY line needs conversion
+      const lines = content.split('\n').filter(l => l.trim())
+      const needsConversion = hasChanged && lines.some(line => {
+        const lineIsLatex = isLikelyLatex(line)
+        const lineIsValid = lineIsLatex ? isValidLatex(line) : false
+        return !lineIsLatex || !lineIsValid
+      })
 
-      // Convert if changed and (not latex-like OR latex is broken)
-      const needsConversion = hasChanged && (!looksLikeLatex || !latexIsValid)
-
-      console.log('Need conversion?', needsConversion)
+      console.log('Enter check:', { hasChanged, content, original: originalContentRef.current, needsConversion })
 
       if (needsConversion) {
         // Auto-convert natural language to LaTeX
