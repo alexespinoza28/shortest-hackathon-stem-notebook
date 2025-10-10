@@ -51,8 +51,7 @@ export function NotebooksHome() {
         <div className="container mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <NvidiaLogo className="w-10 h-10" />
-              <h1 className="text-3xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-gothic-a1)' }}>Nemo Pad</h1>
+              <h1 className="text-4xl font-bold tracking-tight" style={{ fontFamily: 'var(--font-crimson-text)' }}>Nemo Pad</h1>
             </div>
             <NewNotebookDialog />
           </div>

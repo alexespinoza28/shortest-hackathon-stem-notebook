@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, JetBrains_Mono, Gothic_A1 } from "next/font/google"
+import { Inter, JetBrains_Mono, Crimson_Text } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Suspense } from "react"
@@ -18,11 +18,11 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 })
 
-const gothicA1 = Gothic_A1({
+const crimsonText = Crimson_Text({
   subsets: ["latin"],
-  variable: "--font-gothic-a1",
+  variable: "--font-crimson-text",
   display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["400", "600", "700"],
 })
 
 export const metadata: Metadata = {
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable} ${gothicA1.variable}`}>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable} ${crimsonText.variable}`}>
       <head>
         <Script
           id="mathjax-config"

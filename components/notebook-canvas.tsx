@@ -107,7 +107,7 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
         {/* Top Toolbar */}
         <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a href="/" className="text-xl font-semibold text-primary hover:underline tracking-tight" style={{ fontFamily: 'var(--font-gothic-a1)' }}>
+            <a href="/" className="text-2xl font-semibold text-primary hover:underline tracking-tight" style={{ fontFamily: 'var(--font-crimson-text)' }}>
               Nemo Pad
             </a>
             <NotebookToolbar onInsert={handleInsert} />
@@ -116,9 +116,8 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
             variant={aiOpen ? "default" : "outline"}
             size="default"
             onClick={() => setAiOpen(!aiOpen)}
-            className="gap-3 px-4 py-2"
+            className="gap-2 px-4 py-2"
           >
-            <NvidiaLogo className="w-6 h-6" />
             <span className="font-medium">Nemotron Assistant</span>
           </Button>
         </div>

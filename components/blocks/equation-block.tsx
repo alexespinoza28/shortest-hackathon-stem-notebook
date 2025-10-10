@@ -411,9 +411,11 @@ export function EquationBlock({
             className="cursor-move hover:bg-accent/30 rounded-lg p-2 transition-colors select-none"
           >
             {content ? (
-              <div className="flex flex-col items-start" style={{ gap: `${lineSpacing}px` }}>
+              <div className="flex flex-col items-start">
                 {content.split('\n').filter(line => line.trim()).map((line, idx) => (
-                  <BlockMath key={idx} math={line} />
+                  <div key={idx} style={{ marginTop: idx === 0 ? 0 : `${lineSpacing}px` }}>
+                    <BlockMath math={line} />
+                  </div>
                 ))}
               </div>
             ) : (
