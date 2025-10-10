@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { GripVertical, Trash2, Wand2 } from "lucide-react"
 import { BlockMath } from "react-katex"
+import katex from "katex"
 import "katex/dist/katex.min.css"
 
 interface EquationBlockProps {
@@ -153,6 +154,19 @@ export function EquationBlock({
     return latexPatterns.some(pattern => pattern.test(text))
   }
 
+  // Check if LaTeX is valid by trying to parse it
+  const isValidLatex = (text: string): boolean => {
+    if (!text.trim()) return false
+
+    try {
+      // Try to render it (this will throw if invalid)
+      katex.renderToString(text, { throwOnError: true })
+      return true
+    } catch (e) {
+      return false
+    }
+  }
+
   const convertToLatex = async (text: string) => {
     if (!text.trim()) return text
 
@@ -185,9 +199,17 @@ export function EquationBlock({
 
     // Only convert if:
     // 1. Content has changed
-    // 2. Content doesn't look like LaTeX already
+    // 2. Either content doesn't look like LaTeX OR LaTeX is broken
     const hasChanged = content !== originalContentRef.current
-    const needsConversion = hasChanged && !isLikelyLatex(content)
+    const looksLikeLatex = isLikelyLatex(content)
+    const latexIsValid = looksLikeLatex ? isValidLatex(content) : false
+
+    console.log('Blur check:', { hasChanged, content, original: originalContentRef.current, looksLikeLatex, latexIsValid })
+
+    // Convert if changed and (not latex-like OR latex is broken)
+    const needsConversion = hasChanged && (!looksLikeLatex || !latexIsValid)
+
+    console.log('Need conversion?', needsConversion)
 
     if (needsConversion) {
       // Auto-convert natural language to LaTeX
@@ -210,9 +232,17 @@ export function EquationBlock({
         return
       }
 
-      // Only convert if content has changed and doesn't look like LaTeX
+      // Only convert if content has changed and (not latex-like OR latex is broken)
       const hasChanged = content !== originalContentRef.current
-      const needsConversion = hasChanged && !isLikelyLatex(content)
+      const looksLikeLatex = isLikelyLatex(content)
+      const latexIsValid = looksLikeLatex ? isValidLatex(content) : false
+
+      console.log('Enter check:', { hasChanged, content, original: originalContentRef.current, looksLikeLatex, latexIsValid })
+
+      // Convert if changed and (not latex-like OR latex is broken)
+      const needsConversion = hasChanged && (!looksLikeLatex || !latexIsValid)
+
+      console.log('Need conversion?', needsConversion)
 
       if (needsConversion) {
         // Auto-convert natural language to LaTeX
