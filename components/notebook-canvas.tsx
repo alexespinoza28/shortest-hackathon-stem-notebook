@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { AiSidebar } from "./ai-sidebar"
+import { PagesSidebar } from "./pages-sidebar"
 import { NotebookToolbar } from "./notebook-toolbar-inline"
 import { EquationBlock } from "./blocks/equation-block"
 import { TextBlock } from "./blocks/text-block"
@@ -9,21 +10,21 @@ import { TodoBlock } from "./blocks/todo-block"
 import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { NvidiaLogo } from "./nvidia-logo"
-import { updateNotebook } from "@/lib/notebook-utils"
+import {
+  updateNotebook,
+  getNotebookContent,
+  savePageBlocks,
+  createPage,
+  deletePage,
+  renamePage,
+  type NotebookPage,
+  type Block,
+} from "@/lib/notebook-utils"
 
 interface TodoItem {
   id: string
   text: string
   checked: boolean
-}
-
-interface Block {
-  id: string
-  type: "equation" | "text" | "todo"
-  content?: string
-  items?: TodoItem[]
-  position: { x: number; y: number }
-  scale: number
 }
 
 interface NotebookCanvasProps {
@@ -32,7 +33,10 @@ interface NotebookCanvasProps {
 
 export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanvasProps = {}) {
   const [aiOpen, setAiOpen] = useState(false)
+  const [pagesOpen, setPagesOpen] = useState(true)
   const [blocks, setBlocks] = useState<Block[]>([])
+  const [pages, setPages] = useState<NotebookPage[]>([])
+  const [currentPageId, setCurrentPageId] = useState<string>("")
   const [isLoaded, setIsLoaded] = useState(false)
 
   // Multi-select state
@@ -45,37 +49,47 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
   } | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
 
-  // Load blocks from localStorage on mount
+  // Load pages from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem(`notebook-${notebookId}`)
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        setBlocks(parsed)
-      } catch (e) {
-        console.error("Failed to load notebook:", e)
+    const content = getNotebookContent(notebookId)
+    if (content) {
+      setPages(content.pages)
+      setCurrentPageId(content.currentPageId)
+
+      // Load blocks for current page
+      const currentPage = content.pages.find((p) => p.id === content.currentPageId)
+      if (currentPage) {
+        setBlocks(currentPage.blocks)
       }
     }
     // Mark as loaded after attempting to load
     setIsLoaded(true)
   }, [notebookId])
 
-  // Auto-save blocks to localStorage whenever they change (but only after initial load)
+  // Auto-save blocks to current page whenever they change (but only after initial load)
   useEffect(() => {
-    if (!isLoaded) return // Don't save until we've loaded
+    if (!isLoaded || !currentPageId) return // Don't save until we've loaded
 
-    localStorage.setItem(`notebook-${notebookId}`, JSON.stringify(blocks))
-    console.log(`Saved ${blocks.length} blocks to notebook-${notebookId}`)
+    savePageBlocks(notebookId, currentPageId, blocks)
+    console.log(`Saved ${blocks.length} blocks to page ${currentPageId}`)
 
-    // Update notebook metadata timestamp
-    updateNotebook(notebookId, { updatedAt: Date.now() })
-  }, [blocks, notebookId, isLoaded])
+    // Update local pages state
+    setPages((prevPages) =>
+      prevPages.map((page) =>
+        page.id === currentPageId ? { ...page, blocks } : page
+      )
+    )
+  }, [blocks, notebookId, currentPageId, isLoaded])
 
-  // Keyboard shortcuts for multi-select
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd+A to select all
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      // Ignore shortcuts when typing in inputs
+      const isTyping = document.activeElement?.tagName === 'INPUT' ||
+                       document.activeElement?.tagName === 'TEXTAREA'
+
+      // Ctrl/Cmd+A to select all blocks
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a' && !isTyping) {
         e.preventDefault()
         setSelectedBlocks(new Set(blocks.map(b => b.id)))
       }
@@ -86,20 +100,46 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
       }
 
       // Delete key to delete selected blocks
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBlocks.size > 0) {
-        // Only delete if not focused on an input
-        if (document.activeElement?.tagName !== 'INPUT' &&
-            document.activeElement?.tagName !== 'TEXTAREA') {
-          e.preventDefault()
-          setBlocks(blocks.filter(b => !selectedBlocks.has(b.id)))
-          setSelectedBlocks(new Set())
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBlocks.size > 0 && !isTyping) {
+        e.preventDefault()
+        setBlocks(blocks.filter(b => !selectedBlocks.has(b.id)))
+        setSelectedBlocks(new Set())
+      }
+
+      // Ctrl/Cmd+] for next page
+      if ((e.ctrlKey || e.metaKey) && e.key === ']' && !isTyping) {
+        e.preventDefault()
+        const currentIndex = pages.findIndex((p) => p.id === currentPageId)
+        if (currentIndex < pages.length - 1) {
+          handlePageSelect(pages[currentIndex + 1].id)
         }
+      }
+
+      // Ctrl/Cmd+[ for previous page
+      if ((e.ctrlKey || e.metaKey) && e.key === '[' && !isTyping) {
+        e.preventDefault()
+        const currentIndex = pages.findIndex((p) => p.id === currentPageId)
+        if (currentIndex > 0) {
+          handlePageSelect(pages[currentIndex - 1].id)
+        }
+      }
+
+      // Ctrl/Cmd+B to toggle pages sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b' && !isTyping) {
+        e.preventDefault()
+        setPagesOpen(!pagesOpen)
+      }
+
+      // Ctrl/Cmd+Shift+N for new page
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N' && !isTyping) {
+        e.preventDefault()
+        handlePageCreate()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [blocks, selectedBlocks])
+  }, [blocks, selectedBlocks, pages, currentPageId, pagesOpen])
 
   const handleInsert = (type: string) => {
     const newBlock: Block = {
@@ -364,16 +404,100 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     }
   }
 
+  // ===== PAGE MANAGEMENT HANDLERS =====
+
+  const handlePageSelect = (pageId: string) => {
+    if (pageId === currentPageId) return
+
+    // Clear selection when switching pages
+    setSelectedBlocks(new Set())
+
+    // Load blocks for the selected page
+    const page = pages.find((p) => p.id === pageId)
+    if (page) {
+      setBlocks(page.blocks)
+      setCurrentPageId(pageId)
+
+      // Update current page in storage
+      const content = getNotebookContent(notebookId)
+      if (content) {
+        content.currentPageId = pageId
+        localStorage.setItem(`notebook-${notebookId}`, JSON.stringify(content))
+      }
+    }
+  }
+
+  const handlePageCreate = () => {
+    const newPage = createPage(notebookId)
+    setPages([...pages, newPage])
+    setCurrentPageId(newPage.id)
+    setBlocks([])
+    setSelectedBlocks(new Set())
+  }
+
+  const handlePageDelete = (pageId: string) => {
+    const success = deletePage(notebookId, pageId)
+    if (success) {
+      // Reload pages from storage
+      const content = getNotebookContent(notebookId)
+      if (content) {
+        setPages(content.pages)
+        setCurrentPageId(content.currentPageId)
+
+        // Load blocks for new current page
+        const currentPage = content.pages.find((p) => p.id === content.currentPageId)
+        if (currentPage) {
+          setBlocks(currentPage.blocks)
+        }
+        setSelectedBlocks(new Set())
+      }
+    }
+  }
+
+  const handlePageRename = (pageId: string, newTitle: string) => {
+    const success = renamePage(notebookId, pageId, newTitle)
+    if (success) {
+      setPages((prevPages) =>
+        prevPages.map((page) =>
+          page.id === pageId ? { ...page, title: newTitle } : page
+        )
+      )
+    }
+  }
+
+  const currentPage = pages.find((p) => p.id === currentPageId)
+
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Pages Sidebar */}
+      <PagesSidebar
+        pages={pages}
+        currentPageId={currentPageId}
+        isOpen={pagesOpen}
+        onToggle={() => setPagesOpen(!pagesOpen)}
+        onPageSelect={handlePageSelect}
+        onPageCreate={handlePageCreate}
+        onPageDelete={handlePageDelete}
+        onPageRename={handlePageRename}
+      />
+
       {/* Main Canvas */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Top Toolbar */}
         <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a href="/" className="text-2xl font-semibold text-primary hover:underline tracking-tight" style={{ fontFamily: 'var(--font-crimson-text)' }}>
               Nemo Pad
             </a>
+            {currentPage && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>/</span>
+                <span className="font-medium text-foreground">{currentPage.title}</span>
+                <span className="text-xs">
+                  (Page {pages.findIndex((p) => p.id === currentPageId) + 1} of {pages.length})
+                </span>
+              </div>
+            )}
             <NotebookToolbar onInsert={handleInsert} />
           </div>
           <Button
