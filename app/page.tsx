@@ -1,9 +1,7 @@
-import { NotebookCanvas } from "@/components/notebook-canvas"
+"use client"
+
+import { NotebooksHome } from "@/components/notebooks-home"
 
 export default function Home() {
-  return (
-    <main className="min-h-screen bg-background">
-      <NotebookCanvas />
-    </main>
-  )
+  return <NotebooksHome />
 }

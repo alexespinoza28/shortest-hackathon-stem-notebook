@@ -17,26 +17,80 @@ export async function POST(req: Request) {
       dangerouslyAllowBrowser: true, // Safe in API routes - runs server-side only
     })
 
-    // Create completion with NVIDIA Nemotron model
+    // Create completion with NVIDIA Nemotron 9B model with streaming
     const completion = await client.chat.completions.create({
-      model: "nvidia/llama-3.1-nemotron-nano-4b-v1.1",
+      model: "nvidia/nvidia-nemotron-nano-9b-v2",
       messages: [
         {
           role: "system",
-          content:
-            "You are a helpful STEM tutor assistant. Provide clear, detailed explanations for mathematical, scientific, and programming concepts. Use LaTeX notation for math when appropriate.",
+          content: "/think You are a helpful STEM tutor assistant. Provide clear, detailed explanations for mathematical, scientific, and programming concepts. Use LaTeX notation for math when appropriate.",
         },
         { role: "user", content: prompt },
       ],
       temperature: 0.6,
       top_p: 0.95,
-      max_tokens: 8192,
-      stream: false,
+      max_tokens: 2048,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+      stream: true,
+      extra_body: {
+        min_thinking_tokens: 1024,
+        max_thinking_tokens: 2048,
+      },
     })
 
-    const response = completion.choices[0]?.message?.content || "No response generated"
+    // Create a readable stream for the response
+    const encoder = new TextEncoder()
+    let fullResponse = ""
+    let inThinkingBlock = false
 
-    return Response.json({ response })
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of completion) {
+            const content = chunk.choices[0]?.delta?.content || ""
+            if (!content) continue
+
+            fullResponse += content
+
+            // Filter out thinking blocks in real-time
+            let processedContent = content
+
+            // Check if we're entering a thinking block
+            if (content.includes("<think>")) {
+              inThinkingBlock = true
+              processedContent = content.split("<think>")[0]
+            }
+
+            // Skip content if we're in a thinking block
+            if (inThinkingBlock) {
+              // Check if we're exiting the thinking block
+              if (content.includes("</think>")) {
+                inThinkingBlock = false
+                const afterThink = content.split("</think>").slice(1).join("</think>")
+                processedContent = afterThink
+              } else {
+                processedContent = ""
+              }
+            }
+
+            if (processedContent) {
+              controller.enqueue(encoder.encode(processedContent))
+            }
+          }
+          controller.close()
+        } catch (error) {
+          controller.error(error)
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+      },
+    })
   } catch (error) {
     console.error("[v0] AI API Error:", error)
     return Response.json(

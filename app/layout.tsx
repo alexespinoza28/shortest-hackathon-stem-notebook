@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter, JetBrains_Mono } from "next/font/google"
+import { Inter, JetBrains_Mono, Gothic_A1 } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { Suspense } from "react"
@@ -18,9 +18,16 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 })
 
+const gothicA1 = Gothic_A1({
+  subsets: ["latin"],
+  variable: "--font-gothic-a1",
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
+})
+
 export const metadata: Metadata = {
-  title: "STEM Notebook",
-  description: "Your digital paper for mathematics, code, and scientific exploration",
+  title: "Nemo Pad",
+  description: "Your digital paper for mathematics, code, and scientific exploration powered by NVIDIA Nemotron",
   generator: "v0.app",
 }
 
@@ -30,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable} ${gothicA1.variable}`}>
       <head>
         <Script
           id="mathjax-config"
@@ -39,7 +46,7 @@ export default function RootLayout({
             __html: `
               window.MathJax = {
                 tex: {
-                  inlineMath: [['$', '$'], ['\\$', '\\$']],
+                  inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
                   displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
                 },
                 svg: {
