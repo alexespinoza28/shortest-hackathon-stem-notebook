@@ -193,16 +193,36 @@ export function EquationBlock({
 
     setIsConverting(true)
     try {
-      const response = await fetch("/api/latex-convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      })
+      // Split by newlines to handle multi-line input
+      const lines = text.split('\n')
+      const convertedLines = await Promise.all(
+        lines.map(async (line) => {
+          if (!line.trim()) return '' // Empty line
 
-      if (!response.ok) throw new Error("Conversion failed")
+          // Check if this line needs conversion
+          const lineIsLatex = isLikelyLatex(line)
+          const lineIsValid = lineIsLatex ? isValidLatex(line) : false
 
-      const data = await response.json()
-      return data.latex || text
+          // Only convert if not valid LaTeX
+          if (!lineIsLatex || !lineIsValid) {
+            const response = await fetch("/api/latex-convert", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: line }),
+            })
+
+            if (!response.ok) throw new Error("Conversion failed")
+
+            const data = await response.json()
+            return data.latex || line
+          }
+
+          return line // Already valid LaTeX
+        })
+      )
+
+      // Join with LaTeX line break
+      return convertedLines.filter(l => l.trim()).join(' \\\\ ')
     } catch (error) {
       console.error("LaTeX conversion error:", error)
       return text
