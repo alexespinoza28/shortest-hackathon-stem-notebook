@@ -1,37 +1,19 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { InlineMath, BlockMath } from "react-katex"
+import "katex/dist/katex.min.css"
 
 interface MarkdownContentProps {
   content: string
 }
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (contentRef.current && typeof window !== "undefined" && (window as any).MathJax) {
-      // Add a small delay to let the DOM settle before typesetting
-      const timer = setTimeout(() => {
-        if (contentRef.current) {
-          ;(window as any).MathJax.typesetPromise([contentRef.current])
-            .then(() => {
-              console.log("MathJax typeset complete")
-            })
-            .catch((err: any) => {
-              console.error("MathJax error:", err)
-            })
-        }
-      }, 100)
-
-      return () => clearTimeout(timer)
-    }
-  }, [content])
-
-  // Simple markdown parser for basic formatting
-  const parseMarkdown = (text: string) => {
-    // Protect LaTeX equations from other replacements
-    const latexPlaceholders: string[] = []
+  // Parse content into text and LaTeX segments
+  const parseContent = (text: string): React.ReactNode[] => {
+    const segments: React.ReactNode[] = []
+    let currentIndex = 0
+    let key = 0
 
     // Auto-wrap LaTeX commands that aren't already in $ delimiters
     const wrapLatexCommands = (str: string): string => {
@@ -45,147 +27,101 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         const startPos = match.index
         const cmdEndPos = startPos + match[0].length
 
-        // Check if already wrapped with $
-        if (startPos > 0 && str[startPos - 1] === '$') {
-          continue
-        }
+        if (startPos > 0 && str[startPos - 1] === '$') continue
 
-        // Find matching closing brace
         let depth = 1
         let endPos = cmdEndPos
-
         while (depth > 0 && endPos < str.length) {
           if (str[endPos] === '{') depth++
           if (str[endPos] === '}') depth--
           endPos++
         }
 
-        // Check if followed by $
-        if (endPos < str.length && str[endPos] === '$') {
-          continue
-        }
+        if (endPos < str.length && str[endPos] === '$') continue
 
-        // Store replacement
         const fullCommand = str.substring(startPos, endPos)
-        replacements.push({
-          start: startPos,
-          end: endPos,
-          text: `$${fullCommand}$`,
-        })
+        replacements.push({ start: startPos, end: endPos, text: `$${fullCommand}$` })
       }
 
-      // Pattern 2: Standalone backslash commands like \alpha, \pi, \infty, etc.
+      // Pattern 2: Standalone backslash commands
       const standaloneRegex = /\\[a-zA-Z]+/g
       while ((match = standaloneRegex.exec(str)) !== null) {
         const startPos = match.index
         const endPos = startPos + match[0].length
 
-        // Check if already wrapped or part of another replacement
-        if (startPos > 0 && str[startPos - 1] === '$') {
-          continue
-        }
-        if (endPos < str.length && str[endPos] === '$') {
-          continue
-        }
+        if (startPos > 0 && str[startPos - 1] === '$') continue
+        if (endPos < str.length && str[endPos] === '$') continue
 
-        // Check if this is already part of a braces pattern we found
         const overlaps = replacements.some(r => startPos >= r.start && endPos <= r.end)
-        if (overlaps) {
-          continue
-        }
+        if (overlaps) continue
 
-        replacements.push({
-          start: startPos,
-          end: endPos,
-          text: `$${match[0]}$`,
-        })
+        replacements.push({ start: startPos, end: endPos, text: `$${match[0]}$` })
       }
 
-      // Pattern 3: Superscripts and subscripts like x^2, x_1, x^{10}
-      const scriptRegex = /([a-zA-Z0-9])([\^_])(\{[^}]+\}|[a-zA-Z0-9])/g
-      while ((match = scriptRegex.exec(str)) !== null) {
-        const startPos = match.index
-        const endPos = startPos + match[0].length
-
-        // Check if already wrapped
-        if (startPos > 0 && str[startPos - 1] === '$') {
-          continue
-        }
-        if (endPos < str.length && str[endPos] === '$') {
-          continue
-        }
-
-        // Check if overlaps with existing replacements
-        const overlaps = replacements.some(r =>
-          (startPos >= r.start && startPos < r.end) ||
-          (endPos > r.start && endPos <= r.end)
-        )
-        if (overlaps) {
-          continue
-        }
-
-        replacements.push({
-          start: startPos,
-          end: endPos,
-          text: `$${match[0]}$`,
-        })
-      }
-
-      // Apply replacements in reverse order to maintain positions
       replacements.sort((a, b) => b.start - a.start)
       let result = str
       for (const { start, end, text } of replacements) {
         result = result.substring(0, start) + text + result.substring(end)
       }
-
       return result
     }
 
     text = wrapLatexCommands(text)
 
-    // Store display math $$ ... $$
-    text = text.replace(/\$\$(.+?)\$\$/gs, (match, equation) => {
-      const placeholder = `__LATEX_DISPLAY_${latexPlaceholders.length}__`
-      latexPlaceholders.push(`$$${equation}$$`)
-      return placeholder
-    })
+    // Match display math $$ ... $$ and inline math $ ... $
+    const regex = /(\$\$[\s\S]+?\$\$|\$[^$]+?\$)/g
+    let match
 
-    // Store inline math $ ... $ (keep original $ delimiters)
-    text = text.replace(/\$(.+?)\$/g, (match, equation) => {
-      const placeholder = `__LATEX_INLINE_${latexPlaceholders.length}__`
-      latexPlaceholders.push(`$${equation}$`)
-      return placeholder
-    })
-
-    // Convert **bold** to <strong> (but not inside code blocks)
-    text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-
-    // Convert *italic* to <em> (but be careful with * in equations)
-    text = text.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>")
-
-    // Convert inline code `code` to <code>
-    text = text.replace(/`(.+?)`/g, "<code class='bg-muted px-1 py-0.5 rounded text-sm'>$1</code>")
-
-    // Convert line breaks
-    text = text.replace(/\n/g, "<br />")
-
-    // Restore LaTeX equations (all use original delimiters now)
-    latexPlaceholders.forEach((latex, index) => {
-      if (latex.startsWith('$$')) {
-        text = text.replace(`__LATEX_DISPLAY_${index}__`, latex)
-      } else {
-        text = text.replace(`__LATEX_INLINE_${index}__`, latex)
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the math
+      if (match.index > currentIndex) {
+        const textSegment = text.substring(currentIndex, match.index)
+        segments.push(
+          <span key={key++} dangerouslySetInnerHTML={{ __html: formatText(textSegment) }} />
+        )
       }
-    })
 
-    return text
+      // Add the math
+      const latex = match[0]
+      if (latex.startsWith('$$')) {
+        const equation = latex.slice(2, -2)
+        segments.push(<BlockMath key={key++} math={equation} />)
+      } else {
+        const equation = latex.slice(1, -1)
+        segments.push(<InlineMath key={key++} math={equation} />)
+      }
+
+      currentIndex = match.index + match[0].length
+    }
+
+    // Add remaining text
+    if (currentIndex < text.length) {
+      const textSegment = text.substring(currentIndex)
+      segments.push(
+        <span key={key++} dangerouslySetInnerHTML={{ __html: formatText(textSegment) }} />
+      )
+    }
+
+    return segments
+  }
+
+  // Format plain text with basic markdown
+  const formatText = (text: string): string => {
+    let formatted = text
+    // Bold
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // Italic
+    formatted = formatted.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>")
+    // Inline code
+    formatted = formatted.replace(/`(.+?)`/g, "<code class='bg-muted px-1 py-0.5 rounded text-sm font-mono'>$1</code>")
+    // Line breaks
+    formatted = formatted.replace(/\n/g, "<br />")
+    return formatted
   }
 
   return (
-    <div
-      ref={contentRef}
-      className="prose prose-sm dark:prose-invert max-w-none"
-      dangerouslySetInnerHTML={{ __html: parseMarkdown(content) }}
-    />
+    <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+      {parseContent(content)}
+    </div>
   )
 }

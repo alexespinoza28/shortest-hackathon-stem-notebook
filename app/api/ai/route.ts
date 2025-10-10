@@ -35,12 +35,21 @@ GOOD responses (always do this):
 - Start immediately with the answer
 - Be clear and educational
 - Use examples when helpful
-- Use LaTeX for math: \\int, \\frac{a}{b}, etc.
+- ALWAYS use proper LaTeX notation wrapped in $ delimiters for ALL mathematical expressions
+- ALWAYS use \\frac{numerator}{denominator} for fractions - NEVER use slash notation like x^3/3
+- Wrap inline math in $ signs: $x^2$, $\\frac{x^3}{3}$, $\\int_0^{100} x^2 \\, dx$
+- Use display math with $$ for important equations
+
+LaTeX formatting rules:
+- Fractions: $\\frac{x^3}{3}$ NOT x^3/3 or x³/3
+- Integrals: $\\int_a^b f(x) \\, dx$
+- Superscripts: $x^2$ NOT x^2 or x²
+- Subscripts: $x_1$ NOT x_1
 
 Example:
-User: "explain integrals"
-Bad: "Okay, the user wants me to explain integrals. Let me start by..."
-Good: "Integrals represent the area under a curve. There are two types: indefinite and definite..."`,
+User: "what is the integral of x squared from 0 to 100?"
+Bad: "The integral of x^2 from 0 to 100 equals 100^3/3"
+Good: "The integral $\\int_0^{100} x^2 \\, dx = \\frac{x^3}{3}$ evaluated from 0 to 100 equals $\\frac{100^3}{3} = \\frac{1000000}{3}$"`,
         },
         { role: "user", content: prompt },
       ],
