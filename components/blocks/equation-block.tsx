@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { GripVertical, Trash2, Wand2 } from "lucide-react"
 import { BlockMath } from "react-katex"
+import katex from "katex"
 import "katex/dist/katex.min.css"
 
 interface EquationBlockProps {
@@ -190,11 +191,7 @@ export function EquationBlock({
 
     try {
       // Try to render it - if KaTeX can parse it, it's valid LaTeX
-      // Use dynamic import for v0 compatibility
-      if (typeof window !== 'undefined') {
-        const katex = require('katex')
-        katex.renderToString(text, { throwOnError: true })
-      }
+      katex.renderToString(text, { throwOnError: true })
       return true
     } catch (e) {
       // If KaTeX can't parse it, it's either broken LaTeX or natural language
