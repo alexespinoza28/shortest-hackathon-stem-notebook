@@ -49,25 +49,25 @@ A modern, freeform STEM notebook powered by NVIDIA Nemotron AI. Write equations,
 ### Installation
 
 1. Clone the repository:
-```bash
+\`\`\`bash
 git clone https://github.com/yourusername/nemo-pad.git
 cd nemo-pad
-```
+\`\`\`
 
 2. Install dependencies:
-```bash
+\`\`\`bash
 npm install
-```
+\`\`\`
 
 3. Create a `.env.local` file and add your NVIDIA API key:
-```env
+\`\`\`env
 NVIDIA_API_KEY=your_api_key_here
-```
+\`\`\`
 
 4. Run the development server:
-```bash
+\`\`\`bash
 npm run dev
-```
+\`\`\`
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
 

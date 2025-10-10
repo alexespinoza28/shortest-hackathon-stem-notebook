@@ -119,7 +119,7 @@ Create the ultimate digital STEM notebook that combines the freedom of paper wit
 - [ ] Right-click context menu for selection actions
 
 **Technical Approach:**
-```typescript
+\`\`\`typescript
 // State
 const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(new Set())
 const [selectionBox, setSelectionBox] = useState<Rectangle | null>(null)
@@ -130,7 +130,7 @@ const [selectionBox, setSelectionBox] = useState<Rectangle | null>(null)
 // Update selectedBlocks state
 
 // On move: apply same delta to all selected blocks
-```
+\`\`\`
 
 ### 2. Code Execution Block
 **Goal:** Run Python code directly in notebooks (Pyodide already in dependencies!)

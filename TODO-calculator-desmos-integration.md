@@ -25,14 +25,14 @@ Add computational capabilities to notebook blocks, including a Desmos-style calc
 - [ ] Install Desmos API package/CDN
 - [ ] Create Desmos calculator component
 - [ ] Set up calculator initialization:
-  ```typescript
+  \`\`\`typescript
   const calculator = Desmos.GraphingCalculator(element, {
     keypad: true,
     expressions: true,
     settingsMenu: true,
     // ... other options
   });
-  ```
+  \`\`\`
 - [ ] Configure calculator permissions and features
 - [ ] Style calculator to match notebook theme
 
@@ -82,7 +82,7 @@ Add computational capabilities to notebook blocks, including a Desmos-style calc
 
 ### 7. Calculator State Management
 - [ ] Save calculator state in block data:
-  ```typescript
+  \`\`\`typescript
   {
     type: 'calculator',
     expressions: [...],
@@ -90,7 +90,7 @@ Add computational capabilities to notebook blocks, including a Desmos-style calc
     variables: {...},
     settings: {...}
   }
-  ```
+  \`\`\`
 - [ ] Restore calculator state when loading notebook
 - [ ] Handle calculator state in block duplication
 - [ ] Implement undo/redo for calculator operations

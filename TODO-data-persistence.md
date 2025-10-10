@@ -42,11 +42,11 @@ Implement robust data persistence to save and restore notebook data, ensuring us
 
 ### 4. Backend/Cloud Storage (Option 3)
 - [ ] Design database schema:
-  ```sql
+  \`\`\`sql
   users (id, email, created_at)
   notebooks (id, user_id, title, subject, metadata, created_at, updated_at)
   blocks (id, notebook_id, type, content, position, created_at, updated_at)
-  ```
+  \`\`\`
 - [ ] Set up backend API endpoints:
   - `POST /api/notebooks` - Create notebook
   - `GET /api/notebooks` - List all notebooks
