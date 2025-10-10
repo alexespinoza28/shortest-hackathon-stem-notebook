@@ -17,11 +17,42 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
 
     // Auto-wrap LaTeX commands that aren't already in $ delimiters
     const wrapLatexCommands = (str: string): string => {
+      // First, fix malformed \frac commands that are missing braces around denominator
+      // e.g., \frac{x^3}3 -> \frac{x^3}{3}
+      str = str.replace(/\\frac\{([^}]+)\}([a-zA-Z0-9]+)/g, (match, numerator, denominator) => {
+        return `\\frac{${numerator}}{${denominator}}`
+      })
+
+      // Convert slash fractions to \frac inside $ delimiters
+      str = str.replace(/\$([^$]+)\$/g, (match, content) => {
+        // Convert patterns like x^2 / 3 or x/100 to \frac{x^2}{3}
+        // Also handle cases with subscripts: x_0^3 / 3
+        const converted = content.replace(
+          /([a-zA-Z0-9]+(?:[_\^][\{]?[a-zA-Z0-9]+[\}]?)*)\s*\/\s*([a-zA-Z0-9]+(?:[_\^][\{]?[a-zA-Z0-9]+[\}]?)*)/g,
+          (m, numerator, denominator) => {
+            return `\\frac{${numerator}}{${denominator}}`
+          }
+        )
+        return `$${converted}$`
+      })
+
       const replacements: { start: number; end: number; text: string }[] = []
+      let match
+
+      // Special pattern: \left[ ... \right]_a^b notation (evaluation brackets)
+      const evalBracketRegex = /\\left\[[^\]]+\\right\][_^]?[\{]?[^\s$]+[\}]?[_^]?[\{]?[^\s$]*[\}]?/g
+      while ((match = evalBracketRegex.exec(str)) !== null) {
+        const startPos = match.index
+        const endPos = startPos + match[0].length
+
+        if (startPos > 0 && str[startPos - 1] === '$') continue
+        if (endPos < str.length && str[endPos] === '$') continue
+
+        replacements.push({ start: startPos, end: endPos, text: `$${match[0]}$` })
+      }
 
       // Pattern 1: Commands with braces like \frac{a}{b}, \boxed{...}
       const bracesRegex = /(\\[a-zA-Z]+)\{/g
-      let match
 
       while ((match = bracesRegex.exec(str)) !== null) {
         const startPos = match.index
@@ -29,8 +60,17 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
 
         if (startPos > 0 && str[startPos - 1] === '$') continue
 
+        // Check if this overlaps with evaluation bracket patterns
+        const overlaps = replacements.some(r =>
+          (startPos >= r.start && startPos < r.end) ||
+          (cmdEndPos > r.start && cmdEndPos <= r.end)
+        )
+        if (overlaps) continue
+
+        // Find matching closing brace
         let depth = 1
         let endPos = cmdEndPos
+
         while (depth > 0 && endPos < str.length) {
           if (str[endPos] === '{') depth++
           if (str[endPos] === '}') depth--
@@ -43,7 +83,7 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
         replacements.push({ start: startPos, end: endPos, text: `$${fullCommand}$` })
       }
 
-      // Pattern 2: Standalone backslash commands
+      // Pattern 2: Standalone backslash commands (including \left, \right without brackets)
       const standaloneRegex = /\\[a-zA-Z]+/g
       while ((match = standaloneRegex.exec(str)) !== null) {
         const startPos = match.index
