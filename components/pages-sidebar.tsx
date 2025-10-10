@@ -104,10 +104,10 @@ export function PagesSidebar({
                     />
                   </div>
                 ) : (
-                  <button
+                  <div
                     onClick={() => onPageSelect(page.id)}
                     onDoubleClick={() => handleStartEdit(page)}
-                    className="w-full px-3 py-2 text-left flex items-center gap-2"
+                    className="w-full px-3 py-2 text-left flex items-center gap-2 cursor-pointer"
                   >
                     <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -153,7 +153,7 @@ export function PagesSidebar({
                         </button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 )}
               </div>
             )
