@@ -1,0 +1,9 @@
+import { NotebookCanvas } from "@/components/notebook-canvas"
+
+export default function Home() {
+  return (
+    <main className="min-h-screen bg-background">
+      <NotebookCanvas />
+    </main>
+  )
+}
