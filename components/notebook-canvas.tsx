@@ -1,127 +1,103 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { NotebookBlock } from "./notebook-block"
-import { NotebookToolbar } from "./notebook-toolbar"
-import { Plus } from "lucide-react"
+import { useState, useRef } from "react"
+import { AiSidebar } from "./ai-sidebar"
+import { NotebookToolbar } from "./notebook-toolbar-inline"
+import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export type BlockType = "text" | "equation" | "code" | "graph" | "ai"
-
-export interface Block {
-  id: string
-  type: BlockType
-  content: string
-  order: number
-}
-
 export function NotebookCanvas() {
-  const [blocks, setBlocks] = useState<Block[]>([
-    {
-      id: "1",
-      type: "text",
-      content: "# Welcome to STEM Notebook\n\nStart writing your notes, equations, and code here.",
-      order: 0,
-    },
-  ])
-  const [draggedBlock, setDraggedBlock] = useState<string | null>(null)
+  const [content, setContent] = useState("")
+  const [aiOpen, setAiOpen] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const addBlock = (type: BlockType) => {
-    const newBlock: Block = {
-      id: Date.now().toString(),
-      type,
-      content: "",
-      order: blocks.length,
+  const handleInsert = (type: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = textarea.value
+
+    let insertion = ""
+    switch (type) {
+      case "equation":
+        insertion = "\n$$\n\\frac{a}{b} = c\n$$\n"
+        break
+      case "code":
+        insertion = "\n```python\n# Your code here\nprint('Hello, World!')\n```\n"
+        break
+      case "heading":
+        insertion = "\n## Heading\n"
+        break
+      default:
+        return
     }
-    setBlocks([...blocks, newBlock])
-  }
 
-  const updateBlock = (id: string, content: string) => {
-    setBlocks(blocks.map((block) => (block.id === id ? { ...block, content } : block)))
-  }
+    const newText = text.substring(0, start) + insertion + text.substring(end)
+    setContent(newText)
 
-  const deleteBlock = (id: string) => {
-    setBlocks(blocks.filter((block) => block.id !== id))
-  }
-
-  const handleDragStart = (id: string) => {
-    setDraggedBlock(id)
-  }
-
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault()
-    if (!draggedBlock || draggedBlock === targetId) return
-
-    const draggedIndex = blocks.findIndex((b) => b.id === draggedBlock)
-    const targetIndex = blocks.findIndex((b) => b.id === targetId)
-
-    if (draggedIndex === -1 || targetIndex === -1) return
-
-    const newBlocks = [...blocks]
-    const [removed] = newBlocks.splice(draggedIndex, 1)
-    newBlocks.splice(targetIndex, 0, removed)
-
-    // Update order
-    newBlocks.forEach((block, index) => {
-      block.order = index
-    })
-
-    setBlocks(newBlocks)
-  }
-
-  const handleDragEnd = () => {
-    setDraggedBlock(null)
+    // Focus and set cursor position
+    setTimeout(() => {
+      textarea.focus()
+      const newPosition = start + insertion.length
+      textarea.setSelectionRange(newPosition, newPosition)
+    }, 0)
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* Sidebar Toolbar */}
-      <NotebookToolbar onAddBlock={addBlock} />
-
+    <div className="flex h-screen overflow-hidden">
       {/* Main Canvas */}
-      <div className="flex-1 flex flex-col items-center py-12 px-6">
-        <div className="w-full max-w-4xl">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-serif font-bold text-primary mb-2">STEM Notebook</h1>
-            <p className="text-muted-foreground">
-              Your digital paper for mathematics, code, and scientific exploration
-            </p>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Toolbar */}
+        <div className="border-b border-border bg-card px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-serif font-bold text-primary">STEM Notebook</h1>
+            <NotebookToolbar onInsert={handleInsert} />
           </div>
+          <Button
+            variant={aiOpen ? "default" : "outline"}
+            size="sm"
+            onClick={() => setAiOpen(!aiOpen)}
+            className="gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI Assistant
+          </Button>
+        </div>
 
-          {/* Paper-like container */}
-          <div className="bg-card border-2 border-primary rounded-lg shadow-lg min-h-[600px] p-8">
-            <div className="space-y-4">
-              {blocks
-                .sort((a, b) => a.order - b.order)
-                .map((block) => (
-                  <NotebookBlock
-                    key={block.id}
-                    block={block}
-                    onUpdate={updateBlock}
-                    onDelete={deleteBlock}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                    isDragging={draggedBlock === block.id}
-                  />
-                ))}
+        {/* Paper Canvas */}
+        <div className="flex-1 overflow-auto p-8 bg-background">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-card border-2 border-primary rounded-lg shadow-lg min-h-[calc(100vh-200px)] p-12 relative">
+              {/* Grid paper background effect */}
+              <div
+                className="absolute inset-0 opacity-[0.03] pointer-events-none rounded-lg"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(to right, oklch(0.28 0.08 260) 1px, transparent 1px),
+                    linear-gradient(to bottom, oklch(0.28 0.08 260) 1px, transparent 1px)
+                  `,
+                  backgroundSize: "20px 20px",
+                }}
+              />
 
-              {/* Add block button */}
-              <Button
-                variant="outline"
-                className="w-full border-dashed border-2 hover:border-primary hover:bg-muted bg-transparent"
-                onClick={() => addBlock("text")}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Block
-              </Button>
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Start writing your notes here... Use the toolbar above to insert equations, code blocks, and more."
+                className="w-full h-full min-h-[600px] bg-transparent border-none outline-none resize-none font-sans text-base leading-relaxed text-foreground placeholder:text-muted-foreground relative z-10"
+                style={{
+                  fontFamily: "var(--font-inter), sans-serif",
+                }}
+              />
             </div>
           </div>
         </div>
       </div>
+
+      <AiSidebar isOpen={aiOpen} onClose={() => setAiOpen(false)} />
     </div>
   )
 }
