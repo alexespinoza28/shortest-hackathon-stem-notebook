@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     const client = new OpenAI({
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey: process.env.NVIDIA_API_KEY || "$API_KEY_REQUIRED_IF_EXECUTING_OUTSIDE_NGC",
+      dangerouslyAllowBrowser: true, // Safe in API routes - runs server-side only
     })
 
     // Create completion with NVIDIA Nemotron model
