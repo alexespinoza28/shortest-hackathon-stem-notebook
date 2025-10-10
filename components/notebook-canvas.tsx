@@ -3,46 +3,78 @@
 import { useState, useRef } from "react"
 import { AiSidebar } from "./ai-sidebar"
 import { NotebookToolbar } from "./notebook-toolbar-inline"
-import { Sparkles } from "lucide-react"
+import { Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
+export type BlockType = "text" | "equation" | "code" | "heading"
+
+interface Block {
+  id: string
+  type: BlockType
+  content: string
+  x: number
+  y: number
+}
+
 export function NotebookCanvas() {
-  const [content, setContent] = useState("")
+  const [blocks, setBlocks] = useState<Block[]>([])
   const [aiOpen, setAiOpen] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
+  const canvasRef = useRef<HTMLDivElement>(null)
 
-  const handleInsert = (type: string) => {
-    const textarea = textareaRef.current
-    if (!textarea) return
+  const createBlock = (type: BlockType, x: number, y: number) => {
+    const newBlock: Block = {
+      id: Math.random().toString(36).substring(7),
+      type,
+      content: getDefaultContent(type),
+      x,
+      y,
+    }
+    setBlocks([...blocks, newBlock])
+    setSelectedBlock(newBlock.id)
+  }
 
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = textarea.value
-
-    let insertion = ""
+  const getDefaultContent = (type: BlockType): string => {
     switch (type) {
       case "equation":
-        insertion = "\n$$\n\\frac{a}{b} = c\n$$\n"
-        break
+        return "\\frac{a}{b} = c"
       case "code":
-        insertion = "\n```python\n# Your code here\nprint('Hello, World!')\n```\n"
-        break
+        return "# Your code here\nprint('Hello, World!')"
       case "heading":
-        insertion = "\n## Heading\n"
-        break
+        return "Heading"
+      case "text":
       default:
-        return
+        return "Start typing..."
     }
+  }
 
-    const newText = text.substring(0, start) + insertion + text.substring(end)
-    setContent(newText)
+  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only create new block if clicking on the canvas itself, not on existing blocks
+    if (e.target === canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+      createBlock("text", x, y)
+    }
+  }
 
-    // Focus and set cursor position
-    setTimeout(() => {
-      textarea.focus()
-      const newPosition = start + insertion.length
-      textarea.setSelectionRange(newPosition, newPosition)
-    }, 0)
+  const updateBlockContent = (id: string, content: string) => {
+    setBlocks(blocks.map((block) => (block.id === id ? { ...block, content } : block)))
+  }
+
+  const deleteBlock = (id: string) => {
+    setBlocks(blocks.filter((block) => block.id !== id))
+    if (selectedBlock === id) {
+      setSelectedBlock(null)
+    }
+  }
+
+  const handleInsert = (type: BlockType) => {
+    // Insert new block in the center of the visible area
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect()
+      createBlock(type, rect.width / 2 - 100, rect.height / 2 - 50)
+    }
   }
 
   return (
@@ -68,31 +100,104 @@ export function NotebookCanvas() {
 
         {/* Paper Canvas */}
         <div className="flex-1 overflow-auto p-8 bg-background">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-card border-2 border-primary rounded-lg shadow-lg min-h-[calc(100vh-200px)] p-12 relative">
-              {/* Grid paper background effect */}
-              <div
-                className="absolute inset-0 opacity-[0.03] pointer-events-none rounded-lg"
-                style={{
-                  backgroundImage: `
-                    linear-gradient(to right, oklch(0.28 0.08 260) 1px, transparent 1px),
-                    linear-gradient(to bottom, oklch(0.28 0.08 260) 1px, transparent 1px)
-                  `,
-                  backgroundSize: "20px 20px",
-                }}
-              />
+          <div
+            ref={canvasRef}
+            onClick={handleCanvasClick}
+            className="relative bg-card border-2 border-primary rounded-lg shadow-lg min-h-[calc(100vh-200px)] cursor-crosshair"
+            style={{ minHeight: "2000px", minWidth: "100%" }}
+          >
+            {/* Grid paper background effect */}
+            <div
+              className="absolute inset-0 opacity-[0.03] pointer-events-none rounded-lg"
+              style={{
+                backgroundImage: `
+                  linear-gradient(to right, oklch(0.28 0.08 260) 1px, transparent 1px),
+                  linear-gradient(to bottom, oklch(0.28 0.08 260) 1px, transparent 1px)
+                `,
+                backgroundSize: "20px 20px",
+              }}
+            />
 
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Start writing your notes here... Use the toolbar above to insert equations, code blocks, and more."
-                className="w-full h-full min-h-[600px] bg-transparent border-none outline-none resize-none font-sans text-base leading-relaxed text-foreground placeholder:text-muted-foreground relative z-10"
-                style={{
-                  fontFamily: "var(--font-inter), sans-serif",
+            {/* Render blocks */}
+            {blocks.map((block) => (
+              <div
+                key={block.id}
+                className={`absolute group ${selectedBlock === block.id ? "ring-2 ring-primary" : ""}`}
+                style={{ left: block.x, top: block.y }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedBlock(block.id)
                 }}
-              />
-            </div>
+              >
+                <div className="relative bg-background/80 backdrop-blur-sm rounded-lg shadow-md p-3 min-w-[200px] max-w-[600px]">
+                  {/* Delete button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteBlock(block.id)
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+
+                  {/* Block type indicator */}
+                  <div className="text-xs text-muted-foreground mb-1 font-mono">{block.type}</div>
+
+                  {/* Content based on type */}
+                  {block.type === "equation" ? (
+                    <div className="border border-border rounded p-2 bg-card">
+                      <div className="text-sm mb-1 text-muted-foreground">LaTeX:</div>
+                      <textarea
+                        value={block.content}
+                        onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                        className="w-full bg-transparent border-none outline-none resize-none font-mono text-sm"
+                        rows={3}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="mt-2 p-2 bg-muted rounded text-center">
+                        <code>$$${block.content}$$$</code>
+                      </div>
+                    </div>
+                  ) : block.type === "code" ? (
+                    <div className="border border-border rounded p-2 bg-card">
+                      <textarea
+                        value={block.content}
+                        onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                        className="w-full bg-transparent border-none outline-none resize-none font-mono text-sm"
+                        rows={5}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  ) : block.type === "heading" ? (
+                    <input
+                      type="text"
+                      value={block.content}
+                      onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                      className="w-full bg-transparent border-none outline-none text-2xl font-bold"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <textarea
+                      value={block.content}
+                      onChange={(e) => updateBlockContent(block.id, e.target.value)}
+                      className="w-full bg-transparent border-none outline-none resize-none text-sm"
+                      rows={3}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Placeholder text when no blocks */}
+            {blocks.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <p className="text-muted-foreground text-lg">Click anywhere to add a note</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

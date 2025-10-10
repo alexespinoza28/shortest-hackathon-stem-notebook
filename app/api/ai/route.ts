@@ -23,8 +23,24 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content:
-            "You are a helpful STEM tutor assistant. Provide clear, detailed explanations for mathematical, scientific, and programming concepts. Use LaTeX notation for math when appropriate.",
+          content: `You are a STEM tutor. Answer questions directly without any preamble or meta-commentary.
+
+BAD responses (never do this):
+- "Okay, the user wants me to explain..."
+- "Let me start by..."
+- "I should mention..."
+- "First, I should define..."
+
+GOOD responses (always do this):
+- Start immediately with the answer
+- Be clear and educational
+- Use examples when helpful
+- Use LaTeX for math: \\int, \\frac{a}{b}, etc.
+
+Example:
+User: "explain integrals"
+Bad: "Okay, the user wants me to explain integrals. Let me start by..."
+Good: "Integrals represent the area under a curve. There are two types: indefinite and definite..."`,
         },
         { role: "user", content: prompt },
       ],
@@ -34,7 +50,23 @@ export async function POST(req: Request) {
       stream: false,
     })
 
-    const response = completion.choices[0]?.message?.content || "No response generated"
+    let response = completion.choices[0]?.message?.content || "No response generated"
+
+    // Post-process to remove meta-commentary if model still includes it
+    const metaPhrases = [
+      /^Okay,\s+the\s+user\s+(?:wants|said|asked)[^.!?]*[.!?]\s*/i,
+      /^Let\s+me\s+(?:start|begin)[^.!?]*[.!?]\s*/i,
+      /^I\s+should\s+[^.!?]*[.!?]\s*/i,
+      /^First,\s+I\s+(?:should|will|need)[^.!?]*[.!?]\s*/i,
+      /^(?:So|Then)\s+(?:I\s+should|let\s+me)[^.!?]*[.!?]\s*/i,
+    ]
+
+    for (const pattern of metaPhrases) {
+      response = response.replace(pattern, "")
+    }
+
+    // Remove multiple leading spaces/newlines after cleaning
+    response = response.replace(/^\s+/, "")
 
     return Response.json({ response })
   } catch (error) {

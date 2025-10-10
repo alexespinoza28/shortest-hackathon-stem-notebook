@@ -2,9 +2,10 @@
 
 import { Button } from "@/components/ui/button"
 import { Calculator, Code, Heading1 } from "lucide-react"
+import type { BlockType } from "./notebook-canvas"
 
 interface NotebookToolbarInlineProps {
-  onInsert: (type: string) => void
+  onInsert: (type: BlockType) => void
 }
 
 export function NotebookToolbar({ onInsert }: NotebookToolbarInlineProps) {
