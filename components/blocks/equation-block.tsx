@@ -31,11 +31,14 @@ export function EquationBlock({
   const [isEditing, setIsEditing] = useState(!initialContent)
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [isAdjustingSpacing, setIsAdjustingSpacing] = useState(false)
+  const [lineSpacing, setLineSpacing] = useState(2) // gap in pixels, start small
   const [isConverting, setIsConverting] = useState(false)
   const blockRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number; hasMoved: boolean } | null>(null)
   const resizeRef = useRef<{ startX: number; startY: number; startScale: number; startWidth: number } | null>(null)
+  const spacingRef = useRef<{ startY: number; startSpacing: number } | null>(null)
   const dragHandleRef = useRef<HTMLDivElement>(null)
   const originalContentRef = useRef(initialContent)
 
@@ -113,14 +116,23 @@ export function EquationBlock({
         const newScale = Math.max(0.5, Math.min(3, newWidth / currentWidth))
         onScale(id, newScale)
       }
+
+      if (isAdjustingSpacing && spacingRef.current) {
+        const dy = e.clientY - spacingRef.current.startY
+        // No limits - allow negative spacing for overlap
+        const newSpacing = spacingRef.current.startSpacing + dy / 2
+        setLineSpacing(newSpacing)
+      }
     }
 
     const handleMouseUp = (e: MouseEvent) => {
       setIsResizing(false)
+      setIsAdjustingSpacing(false)
       resizeRef.current = null
+      spacingRef.current = null
     }
 
-    if (isResizing) {
+    if (isResizing || isAdjustingSpacing) {
       window.addEventListener("mousemove", handleMouseMove)
       window.addEventListener("mouseup", handleMouseUp)
     }
@@ -129,7 +141,18 @@ export function EquationBlock({
       window.removeEventListener("mousemove", handleMouseMove)
       window.removeEventListener("mouseup", handleMouseUp)
     }
-  }, [isResizing, id, onScale])
+  }, [isResizing, isAdjustingSpacing, id, onScale])
+
+  const handleSpacingMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsAdjustingSpacing(true)
+
+    spacingRef.current = {
+      startY: e.clientY,
+      startSpacing: lineSpacing,
+    }
+  }
 
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value
@@ -340,6 +363,20 @@ export function EquationBlock({
           transformOrigin: "top left",
         }}
       >
+        {/* Spacing Handle - Top */}
+        <div
+          className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-primary/50 rounded-full cursor-ns-resize opacity-0 group-hover:opacity-100 transition-opacity z-20"
+          onMouseDown={handleSpacingMouseDown}
+          title="Drag to adjust line spacing"
+        />
+
+        {/* Spacing Handle - Bottom */}
+        <div
+          className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-12 h-2 bg-primary/50 rounded-full cursor-ns-resize opacity-0 group-hover:opacity-100 transition-opacity z-20"
+          onMouseDown={handleSpacingMouseDown}
+          title="Drag to adjust line spacing"
+        />
+
         {/* Resize Handle - Bottom Right Corner */}
         <div
           className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-nwse-rotate opacity-0 group-hover:opacity-100 transition-opacity z-20 border border-primary-foreground/20"
@@ -374,7 +411,7 @@ export function EquationBlock({
             className="cursor-move hover:bg-accent/30 rounded-lg p-2 transition-colors select-none"
           >
             {content ? (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col items-start" style={{ gap: `${lineSpacing}px` }}>
                 {content.split('\n').filter(line => line.trim()).map((line, idx) => (
                   <BlockMath key={idx} math={line} />
                 ))}
