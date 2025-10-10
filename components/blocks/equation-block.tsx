@@ -158,6 +158,27 @@ export function EquationBlock({
   const isValidLatex = (text: string): boolean => {
     if (!text.trim()) return false
 
+    // Check for natural language keywords that shouldn't be in pure LaTeX
+    const naturalLanguageKeywords = [
+      /\bplus\b/i,
+      /\bminus\b/i,
+      /\btimes\b/i,
+      /\bover\b/i,
+      /\bdivided by\b/i,
+      /\bintegral of\b/i,
+      /\bsum of\b/i,
+      /\bsquare root of\b/i,
+      /\bfraction\b/i,
+      /\bfrom\b/i,
+      /\bto\b/i,
+      /\bequals\b/i,
+    ]
+
+    // If it contains natural language keywords, it's invalid
+    if (naturalLanguageKeywords.some(pattern => pattern.test(text))) {
+      return false
+    }
+
     try {
       // Try to render it (this will throw if invalid)
       katex.renderToString(text, { throwOnError: true })
