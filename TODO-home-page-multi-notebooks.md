@@ -44,7 +44,7 @@ Create a home page where users can manage multiple notebooks/pages, each dedicat
 
 ### 5. Data Structure Updates
 - [ ] Update data model to support multiple notebooks:
-  ```
+  \`\`\`
   {
     notebooks: [
       {
@@ -59,7 +59,7 @@ Create a home page where users can manage multiple notebooks/pages, each dedicat
       }
     ]
   }
-  ```
+  \`\`\`
 
 ### 6. State Management
 - [ ] Update context/state to track:
