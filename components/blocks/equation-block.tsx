@@ -36,6 +36,7 @@ export function EquationBlock({
   const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number; hasMoved: boolean } | null>(null)
   const resizeRef = useRef<{ startX: number; startY: number; startScale: number; startWidth: number } | null>(null)
   const dragHandleRef = useRef<HTMLDivElement>(null)
+  const originalContentRef = useRef(initialContent)
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -74,6 +75,8 @@ export function EquationBlock({
       // If we didn't move, treat it as a click to edit
       if (dragRef.current && !dragRef.current.hasMoved && !isEditing) {
         setIsEditing(true)
+        // Store the current content when entering edit mode
+        originalContentRef.current = content
       }
 
       setIsDragging(false)
@@ -133,6 +136,23 @@ export function EquationBlock({
     onUpdate(id, newContent)
   }
 
+  // Check if text looks like LaTeX (has common LaTeX commands)
+  const isLikelyLatex = (text: string): boolean => {
+    const latexPatterns = [
+      /\\/,           // Has backslash
+      /\\int/,        // Integral
+      /\\frac/,       // Fraction
+      /\\sum/,        // Sum
+      /\\sqrt/,       // Square root
+      /\\lim/,        // Limit
+      /\\prod/,       // Product
+      /\^/,           // Superscript
+      /_/,            // Subscript
+      /\\[a-zA-Z]+/,  // Any LaTeX command
+    ]
+    return latexPatterns.some(pattern => pattern.test(text))
+  }
+
   const convertToLatex = async (text: string) => {
     if (!text.trim()) return text
 
@@ -163,10 +183,20 @@ export function EquationBlock({
       return
     }
 
-    // Auto-convert natural language to LaTeX
-    const latexCode = await convertToLatex(content)
-    setContent(latexCode)
-    onUpdate(id, latexCode)
+    // Only convert if:
+    // 1. Content has changed
+    // 2. Content doesn't look like LaTeX already
+    const hasChanged = content !== originalContentRef.current
+    const needsConversion = hasChanged && !isLikelyLatex(content)
+
+    if (needsConversion) {
+      // Auto-convert natural language to LaTeX
+      const latexCode = await convertToLatex(content)
+      setContent(latexCode)
+      onUpdate(id, latexCode)
+      originalContentRef.current = latexCode
+    }
+
     setIsEditing(false)
   }
 
@@ -180,10 +210,18 @@ export function EquationBlock({
         return
       }
 
-      // Auto-convert natural language to LaTeX
-      const latexCode = await convertToLatex(content)
-      setContent(latexCode)
-      onUpdate(id, latexCode)
+      // Only convert if content has changed and doesn't look like LaTeX
+      const hasChanged = content !== originalContentRef.current
+      const needsConversion = hasChanged && !isLikelyLatex(content)
+
+      if (needsConversion) {
+        // Auto-convert natural language to LaTeX
+        const latexCode = await convertToLatex(content)
+        setContent(latexCode)
+        onUpdate(id, latexCode)
+        originalContentRef.current = latexCode
+      }
+
       setIsEditing(false)
     }
   }
