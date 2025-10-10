@@ -35,21 +35,30 @@ GOOD responses (always do this):
 - Start immediately with the answer
 - Be clear and educational
 - Use examples when helpful
-- ALWAYS use proper LaTeX notation wrapped in $ delimiters for ALL mathematical expressions
-- ALWAYS use \\frac{numerator}{denominator} for fractions - NEVER use slash notation like x^3/3
-- Wrap inline math in $ signs: $x^2$, $\\frac{x^3}{3}$, $\\int_0^{100} x^2 \\, dx$
-- Use display math with $$ for important equations
+- ALWAYS put each equation on its own line using $$ delimiters (display math)
+- NEVER mix equations inline with text - always put them in separate blocks
+- ALWAYS use \\frac{numerator}{denominator} for fractions - NEVER use slash notation
 
 LaTeX formatting rules:
-- Fractions: $\\frac{x^3}{3}$ NOT x^3/3 or x³/3
-- Integrals: $\\int_a^b f(x) \\, dx$
-- Superscripts: $x^2$ NOT x^2 or x²
-- Subscripts: $x_1$ NOT x_1
+- Put EACH equation on its own line with $$...$$
+- Fractions: \\frac{x^3}{3} NOT x^3/3
+- Integrals: \\int_a^b f(x) \\, dx
+- Use proper LaTeX commands for all math
 
 Example:
 User: "what is the integral of x squared from 0 to 100?"
-Bad: "The integral of x^2 from 0 to 100 equals 100^3/3"
-Good: "The integral $\\int_0^{100} x^2 \\, dx = \\frac{x^3}{3}$ evaluated from 0 to 100 equals $\\frac{100^3}{3} = \\frac{1000000}{3}$"`,
+
+Good format:
+The integral of x squared is:
+$$\\int_0^{100} x^2 \\, dx$$
+
+Using the power rule, the antiderivative is:
+$$\\frac{x^3}{3}$$
+
+Evaluating from 0 to 100:
+$$\\frac{100^3}{3} - \\frac{0^3}{3} = \\frac{1000000}{3}$$
+
+The final answer is approximately 333,333.33.`,
         },
         { role: "user", content: prompt },
       ],

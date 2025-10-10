@@ -56,25 +56,36 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
 
       while ((match = bracesRegex.exec(str)) !== null) {
         const startPos = match.index
-        const cmdEndPos = startPos + match[0].length
+        const cmdName = match[1]
+        let endPos = startPos + match[0].length
 
         if (startPos > 0 && str[startPos - 1] === '$') continue
 
         // Check if this overlaps with evaluation bracket patterns
         const overlaps = replacements.some(r =>
           (startPos >= r.start && startPos < r.end) ||
-          (cmdEndPos > r.start && cmdEndPos <= r.end)
+          (endPos > r.start && endPos <= r.end)
         )
         if (overlaps) continue
 
-        // Find matching closing brace
+        // Find matching closing brace for first argument
         let depth = 1
-        let endPos = cmdEndPos
-
         while (depth > 0 && endPos < str.length) {
           if (str[endPos] === '{') depth++
           if (str[endPos] === '}') depth--
           endPos++
+        }
+
+        // Special handling for \frac - it has TWO brace groups {numerator}{denominator}
+        if (cmdName === '\\frac' && endPos < str.length && str[endPos] === '{') {
+          // Continue to capture the second brace group
+          endPos++ // skip the opening {
+          depth = 1
+          while (depth > 0 && endPos < str.length) {
+            if (str[endPos] === '{') depth++
+            if (str[endPos] === '}') depth--
+            endPos++
+          }
         }
 
         if (endPos < str.length && str[endPos] === '$') continue
