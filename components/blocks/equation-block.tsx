@@ -18,25 +18,38 @@ interface EquationBlockProps {
 
 function LaTeXDisplay({ math }: { math: string }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [mathJaxLoaded, setMathJaxLoaded] = useState(false)
 
   useEffect(() => {
-    if (!ref.current) return
-
-    // Try to use KaTeX if available (works locally with npm package)
-    if (typeof window !== "undefined" && (window as any).katex) {
-      try {
-        ;(window as any).katex.render(math, ref.current, {
-          displayMode: true,
-          throwOnError: false,
-        })
-      } catch (e) {
-        ref.current.textContent = `$$${math}$$`
+    // Poll for MathJax availability
+    const checkMathJax = () => {
+      if (typeof window !== "undefined" && (window as any).MathJax) {
+        setMathJaxLoaded(true)
+      } else {
+        setTimeout(checkMathJax, 100)
       }
-    } else {
-      // Fallback for v0 environment - show raw LaTeX
+    }
+    checkMathJax()
+  }, [])
+
+  useEffect(() => {
+    if (!ref.current || !mathJaxLoaded) return
+
+    try {
+      // Use MathJax to render the LaTeX
+      ref.current.innerHTML = `$$${math}$$`
+      const MathJax = (window as any).MathJax
+      if (MathJax?.typesetPromise) {
+        MathJax.typesetPromise([ref.current]).catch((err: any) => {
+          console.error("[v0] MathJax rendering error:", err)
+          ref.current!.textContent = `$$${math}$$`
+        })
+      }
+    } catch (e) {
+      console.error("[v0] LaTeX display error:", e)
       ref.current.textContent = `$$${math}$$`
     }
-  }, [math])
+  }, [math, mathJaxLoaded])
 
   return <div ref={ref} className="text-lg" />
 }
