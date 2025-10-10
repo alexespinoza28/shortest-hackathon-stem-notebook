@@ -3,7 +3,8 @@
 import { useState, useRef } from "react"
 import { AiSidebar } from "./ai-sidebar"
 import { NotebookToolbar } from "./notebook-toolbar-inline"
-import { Sparkles, X } from "lucide-react"
+import { EquationBlock } from "./equation-block"
+import { Sparkles, X, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export type BlockType = "text" | "equation" | "code" | "heading"
@@ -14,12 +15,15 @@ interface Block {
   content: string
   x: number
   y: number
+  isConverting?: boolean
 }
 
 export function NotebookCanvas() {
   const [blocks, setBlocks] = useState<Block[]>([])
   const [aiOpen, setAiOpen] = useState(false)
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
+  const [draggingBlock, setDraggingBlock] = useState<string | null>(null)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const canvasRef = useRef<HTMLDivElement>(null)
 
   const createBlock = (type: BlockType, x: number, y: number) => {
@@ -37,7 +41,7 @@ export function NotebookCanvas() {
   const getDefaultContent = (type: BlockType): string => {
     switch (type) {
       case "equation":
-        return "\\frac{a}{b} = c"
+        return "integral of x^2 from 0 to 100"
       case "code":
         return "# Your code here\nprint('Hello, World!')"
       case "heading":
@@ -59,7 +63,50 @@ export function NotebookCanvas() {
   }
 
   const updateBlockContent = (id: string, content: string) => {
-    setBlocks(blocks.map((block) => (block.id === id ? { ...block, content } : block)))
+    setBlocks(blocks.map((b) => (b.id === id ? { ...b, content } : b)))
+  }
+
+  const convertToLatex = async (id: string) => {
+    const block = blocks.find((b) => b.id === id)
+    if (!block) return
+
+    console.log("Converting:", block.content)
+
+    // Mark as converting
+    setBlocks(blocks.map((b) => (b.id === id ? { ...b, isConverting: true } : b)))
+
+    try {
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `Convert this natural language math expression to LaTeX notation. Only output the LaTeX code with no additional text or explanation: "${block.content}"`
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        let latex = data.response.trim()
+
+        console.log("Converted to:", latex)
+
+        // Clean up the response - remove code blocks, backticks, and $$
+        latex = latex
+          .replace(/```latex\n?/g, "")
+          .replace(/```\n?/g, "")
+          .replace(/^\$+/g, "")
+          .replace(/\$+$/g, "")
+          .trim()
+
+        setBlocks(blocks.map((b) => (b.id === id ? { ...b, content: latex, isConverting: false } : b)))
+      } else {
+        console.error("API error:", await response.text())
+        setBlocks(blocks.map((b) => (b.id === id ? { ...b, isConverting: false } : b)))
+      }
+    } catch (error) {
+      console.error("Failed to convert to LaTeX:", error)
+      setBlocks(blocks.map((b) => (b.id === id ? { ...b, isConverting: false } : b)))
+    }
   }
 
   const deleteBlock = (id: string) => {
@@ -75,6 +122,40 @@ export function NotebookCanvas() {
       const rect = canvasRef.current.getBoundingClientRect()
       createBlock(type, rect.width / 2 - 100, rect.height / 2 - 50)
     }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent, blockId: string) => {
+    if ((e.target as HTMLElement).tagName === "TEXTAREA" || (e.target as HTMLElement).tagName === "INPUT") {
+      return // Don't drag when interacting with inputs
+    }
+
+    const block = blocks.find((b) => b.id === blockId)
+    if (!block) return
+
+    setDraggingBlock(blockId)
+    setSelectedBlock(blockId)
+    setDragOffset({
+      x: e.clientX - block.x,
+      y: e.clientY - block.y,
+    })
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!draggingBlock || !canvasRef.current) return
+
+    const rect = canvasRef.current.getBoundingClientRect()
+    const newX = e.clientX - rect.left - dragOffset.x
+    const newY = e.clientY - rect.top - dragOffset.y
+
+    setBlocks(blocks.map((block) =>
+      block.id === draggingBlock
+        ? { ...block, x: Math.max(0, newX), y: Math.max(0, newY) }
+        : block
+    ))
+  }
+
+  const handleMouseUp = () => {
+    setDraggingBlock(null)
   }
 
   return (
@@ -103,6 +184,9 @@ export function NotebookCanvas() {
           <div
             ref={canvasRef}
             onClick={handleCanvasClick}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
             className="relative bg-card border-2 border-primary rounded-lg shadow-lg min-h-[calc(100vh-200px)] cursor-crosshair"
             style={{ minHeight: "2000px", minWidth: "100%" }}
           >
@@ -122,8 +206,9 @@ export function NotebookCanvas() {
             {blocks.map((block) => (
               <div
                 key={block.id}
-                className={`absolute group ${selectedBlock === block.id ? "ring-2 ring-primary" : ""}`}
+                className={`absolute group ${selectedBlock === block.id ? "ring-2 ring-primary" : ""} ${draggingBlock === block.id ? "cursor-grabbing" : "cursor-grab"}`}
                 style={{ left: block.x, top: block.y }}
+                onMouseDown={(e) => handleMouseDown(e, block.id)}
                 onClick={(e) => {
                   e.stopPropagation()
                   setSelectedBlock(block.id)
@@ -144,22 +229,27 @@ export function NotebookCanvas() {
                   </Button>
 
                   {/* Block type indicator */}
-                  <div className="text-xs text-muted-foreground mb-1 font-mono">{block.type}</div>
+                  <div className="text-xs text-muted-foreground mb-1 font-mono flex items-center gap-2">
+                    <span>{block.type}</span>
+                    {block.isConverting && <span className="text-primary animate-pulse">Converting...</span>}
+                  </div>
 
                   {/* Content based on type */}
                   {block.type === "equation" ? (
-                    <div className="border border-border rounded p-2 bg-card">
-                      <div className="text-sm mb-1 text-muted-foreground">LaTeX:</div>
-                      <textarea
-                        value={block.content}
-                        onChange={(e) => updateBlockContent(block.id, e.target.value)}
-                        className="w-full bg-transparent border-none outline-none resize-none font-mono text-sm"
-                        rows={3}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="mt-2 p-2 bg-muted rounded text-center">
-                        <code>$$${block.content}$$$</code>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <div className="mb-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => convertToLatex(block.id)}
+                          disabled={block.isConverting}
+                          className="w-full gap-2"
+                        >
+                          <Wand2 className="w-3 h-3" />
+                          {block.isConverting ? "Converting..." : "Convert to LaTeX"}
+                        </Button>
                       </div>
+                      <EquationBlock content={block.content} onUpdate={(content) => updateBlockContent(block.id, content)} />
                     </div>
                   ) : block.type === "code" ? (
                     <div className="border border-border rounded p-2 bg-card">
