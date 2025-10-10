@@ -89,7 +89,7 @@ export function NewNotebookDialog() {
   }
 
   const handleClose = () => {
-    setOpen(false)
+    // Reset state when closing
     setStep("template")
     setTitle("")
     setSubject("")
@@ -98,9 +98,12 @@ export function NewNotebookDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      setOpen(isOpen);
+      if (!isOpen) handleClose();
+    }}>
       <DialogTrigger asChild>
-        <Button size="lg" className="gap-2">
+        <Button size="lg" className="gap-2" onClick={() => setOpen(true)}>
           <Plus className="w-5 h-5" />
           New Notebook
         </Button>
@@ -180,7 +183,7 @@ export function NewNotebookDialog() {
               Back
             </Button>
           )}
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={() => { handleClose(); setOpen(false); }}>
             Cancel
           </Button>
           {step === "details" && (

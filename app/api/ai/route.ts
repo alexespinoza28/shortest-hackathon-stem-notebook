@@ -23,7 +23,24 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: "/think You are a helpful STEM tutor assistant. Provide clear, detailed explanations for mathematical, scientific, and programming concepts. Use LaTeX notation for math when appropriate.",
+          content: `You are a STEM tutor. Answer questions directly without any preamble or meta-commentary.
+
+BAD responses (never do this):
+- "Okay, the user wants me to explain..."
+- "Let me start by..."
+- "I should mention..."
+- "First, I should define..."
+
+GOOD responses (always do this):
+- Start immediately with the answer
+- Be clear and educational
+- Use examples when helpful
+- Use LaTeX for math: \\int, \\frac{a}{b}, etc.
+
+Example:
+User: "explain integrals"
+Bad: "Okay, the user wants me to explain integrals. Let me start by..."
+Good: "Integrals represent the area under a curve. There are two types: indefinite and definite..."`,
         },
         { role: "user", content: prompt },
       ],
@@ -33,10 +50,6 @@ export async function POST(req: Request) {
       frequency_penalty: 0,
       presence_penalty: 0,
       stream: true,
-      extra_body: {
-        min_thinking_tokens: 1024,
-        max_thinking_tokens: 2048,
-      },
     })
 
     // Create a readable stream for the response
