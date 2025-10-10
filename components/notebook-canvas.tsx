@@ -31,7 +31,7 @@ interface NotebookCanvasProps {
   notebookId?: string
 }
 
-export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanvasProps = {}) {
+export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanvasProps) {
   const [aiOpen, setAiOpen] = useState(false)
   const [pagesOpen, setPagesOpen] = useState(true)
   const [blocks, setBlocks] = useState<Block[]>([])
