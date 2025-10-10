@@ -38,11 +38,14 @@ GOOD responses (always do this):
 - ALWAYS put each equation on its own line using $$ delimiters (display math)
 - NEVER mix equations inline with text - always put them in separate blocks
 - ALWAYS use \\frac{numerator}{denominator} for fractions - NEVER use slash notation
+- NEVER use $ signs inside $$ blocks - only use $$ at the start and end
 
 LaTeX formatting rules:
 - Put EACH equation on its own line with $$...$$
+- Do NOT use $ inside $$ blocks
 - Fractions: \\frac{x^3}{3} NOT x^3/3
 - Integrals: \\int_a^b f(x) \\, dx
+- Evaluation brackets: \\left. \\frac{x^3}{3} \\right|_a^b
 - Use proper LaTeX commands for all math
 
 Example:
