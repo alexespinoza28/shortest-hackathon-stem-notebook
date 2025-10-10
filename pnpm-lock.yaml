@@ -123,7 +123,7 @@ importers:
         specifier: 1.4.1
         version: 1.4.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       katex:
-        specifier: latest
+        specifier: 0.16.23
         version: 0.16.23
       lucide-react:
         specifier: ^0.454.0
@@ -143,9 +143,6 @@ importers:
       plotly.js:
         specifier: latest
         version: 3.1.1(mapbox-gl@1.13.3)
-      prop-types:
-        specifier: latest
-        version: 15.8.1
       react:
         specifier: ^19
         version: 19.0.0
@@ -159,7 +156,7 @@ importers:
         specifier: ^7.60.0
         version: 7.60.0(react@19.0.0)
       react-katex:
-        specifier: latest
+        specifier: 3.1.0
         version: 3.1.0(prop-types@15.8.1)(react@19.0.0)
       react-plotly.js:
         specifier: latest

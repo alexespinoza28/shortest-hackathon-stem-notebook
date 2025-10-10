@@ -1,10 +1,9 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useRef, useEffect } from "react"
 import { GripVertical, Trash2, Wand2 } from "lucide-react"
-import { BlockMath } from "react-katex"
-import katex from "katex"
-import "katex/dist/katex.min.css"
 
 interface EquationBlockProps {
   id: string
@@ -15,6 +14,31 @@ interface EquationBlockProps {
   onDelete: (id: string) => void
   onMove: (id: string, position: { x: number; y: number }) => void
   onScale: (id: string, scale: number) => void
+}
+
+function LaTeXDisplay({ math }: { math: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current) return
+
+    // Try to use KaTeX if available (works locally with npm package)
+    if (typeof window !== "undefined" && (window as any).katex) {
+      try {
+        ;(window as any).katex.render(math, ref.current, {
+          displayMode: true,
+          throwOnError: false,
+        })
+      } catch (e) {
+        ref.current.textContent = `$$${math}$$`
+      }
+    } else {
+      // Fallback for v0 environment - show raw LaTeX
+      ref.current.textContent = `$$${math}$$`
+    }
+  }, [math])
+
+  return <div ref={ref} className="text-lg" />
 }
 
 export function EquationBlock({
@@ -36,7 +60,13 @@ export function EquationBlock({
   const [isConverting, setIsConverting] = useState(false)
   const blockRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number; hasMoved: boolean } | null>(null)
+  const dragRef = useRef<{
+    startX: number
+    startY: number
+    offsetX: number
+    offsetY: number
+    hasMoved: boolean
+  } | null>(null)
   const resizeRef = useRef<{ startX: number; startY: number; startScale: number; startWidth: number } | null>(null)
   const spacingRef = useRef<{ startY: number; startSpacing: number } | null>(null)
   const dragHandleRef = useRef<HTMLDivElement>(null)
@@ -163,40 +193,43 @@ export function EquationBlock({
   // Check if text looks like LaTeX (has common LaTeX commands)
   const isLikelyLatex = (text: string): boolean => {
     const latexPatterns = [
-      /\\/,           // Has backslash
-      /\\int/,        // Integral
-      /\\frac/,       // Fraction
-      /\\sum/,        // Sum
-      /\\sqrt/,       // Square root
-      /\\lim/,        // Limit
-      /\\prod/,       // Product
-      /\^/,           // Superscript
-      /_/,            // Subscript
-      /\\[a-zA-Z]+/,  // Any LaTeX command
+      /\\/, // Has backslash
+      /\\int/, // Integral
+      /\\frac/, // Fraction
+      /\\sum/, // Sum
+      /\\sqrt/, // Square root
+      /\\lim/, // Limit
+      /\\prod/, // Product
+      /\^/, // Superscript
+      /_/, // Subscript
+      /\\[a-zA-Z]+/, // Any LaTeX command
     ]
-    return latexPatterns.some(pattern => pattern.test(text))
+    return latexPatterns.some((pattern) => pattern.test(text))
   }
 
   // Check if LaTeX is valid by trying to parse it with KaTeX
   const isValidLatex = (text: string): boolean => {
     if (!text.trim()) return false
 
-    // Check for common English words that indicate natural language
-    // Use word boundaries to avoid false positives
-    const englishWords = /\b(plus|minus|times|divided|over|of|the|from|to|squared|cubed|root|power|integral|derivative|limit|equals|and|or)\b/i
+    const englishWords =
+      /\b(plus|minus|times|divided|over|of|the|from|to|squared|cubed|root|power|integral|derivative|limit|equals|and|or)\b/i
 
     if (englishWords.test(text)) {
-      return false // Contains natural language
-    }
-
-    try {
-      // Try to render it - if KaTeX can parse it, it's valid LaTeX
-      katex.renderToString(text, { throwOnError: true })
-      return true
-    } catch (e) {
-      // If KaTeX can't parse it, it's either broken LaTeX or natural language
       return false
     }
+
+    // Check if KaTeX is available globally
+    if (typeof window !== "undefined" && (window as any).katex) {
+      try {
+        ;(window as any).katex.renderToString(text, { throwOnError: true })
+        return true
+      } catch (e) {
+        return false
+      }
+    }
+
+    // If KaTeX not available, do basic LaTeX pattern check
+    return isLikelyLatex(text)
   }
 
   const convertToLatex = async (text: string) => {
@@ -205,7 +238,7 @@ export function EquationBlock({
     setIsConverting(true)
     try {
       // Split by newlines to handle multi-line input
-      const lines = text.split('\n').filter(l => l.trim())
+      const lines = text.split("\n").filter((l) => l.trim())
 
       // If single line, convert normally without aligned wrapper
       if (lines.length === 1) {
@@ -250,11 +283,11 @@ export function EquationBlock({
           }
 
           return line // Already valid LaTeX
-        })
+        }),
       )
 
       // Just join lines with newline - we'll render each separately
-      return convertedLines.join('\n')
+      return convertedLines.join("\n")
     } catch (error) {
       console.error("LaTeX conversion error:", error)
       return text
@@ -273,14 +306,16 @@ export function EquationBlock({
     const hasChanged = content !== originalContentRef.current
 
     // For multi-line content, check if ANY line needs conversion
-    const lines = content.split('\n').filter(l => l.trim())
-    const needsConversion = hasChanged && lines.some(line => {
-      const lineIsLatex = isLikelyLatex(line)
-      const lineIsValid = lineIsLatex ? isValidLatex(line) : false
-      return !lineIsLatex || !lineIsValid
-    })
+    const lines = content.split("\n").filter((l) => l.trim())
+    const needsConversion =
+      hasChanged &&
+      lines.some((line) => {
+        const lineIsLatex = isLikelyLatex(line)
+        const lineIsValid = lineIsLatex ? isValidLatex(line) : false
+        return !lineIsLatex || !lineIsValid
+      })
 
-    console.log('Blur check:', { hasChanged, content, original: originalContentRef.current, needsConversion })
+    console.log("Blur check:", { hasChanged, content, original: originalContentRef.current, needsConversion })
 
     if (needsConversion) {
       // Auto-convert natural language to LaTeX
@@ -306,14 +341,16 @@ export function EquationBlock({
       const hasChanged = content !== originalContentRef.current
 
       // For multi-line content, check if ANY line needs conversion
-      const lines = content.split('\n').filter(l => l.trim())
-      const needsConversion = hasChanged && lines.some(line => {
-        const lineIsLatex = isLikelyLatex(line)
-        const lineIsValid = lineIsLatex ? isValidLatex(line) : false
-        return !lineIsLatex || !lineIsValid
-      })
+      const lines = content.split("\n").filter((l) => l.trim())
+      const needsConversion =
+        hasChanged &&
+        lines.some((line) => {
+          const lineIsLatex = isLikelyLatex(line)
+          const lineIsValid = lineIsLatex ? isValidLatex(line) : false
+          return !lineIsLatex || !lineIsValid
+        })
 
-      console.log('Enter check:', { hasChanged, content, original: originalContentRef.current, needsConversion })
+      console.log("Enter check:", { hasChanged, content, original: originalContentRef.current, needsConversion })
 
       if (needsConversion) {
         // Auto-convert natural language to LaTeX
@@ -412,11 +449,14 @@ export function EquationBlock({
           >
             {content ? (
               <div className="flex flex-col items-start">
-                {content.split('\n').filter(line => line.trim()).map((line, idx) => (
-                  <div key={idx} style={{ marginTop: idx === 0 ? 0 : `${lineSpacing}px` }}>
-                    <BlockMath math={line} />
-                  </div>
-                ))}
+                {content
+                  .split("\n")
+                  .filter((line) => line.trim())
+                  .map((line, idx) => (
+                    <div key={idx} style={{ marginTop: idx === 0 ? 0 : `${lineSpacing}px` }}>
+                      <LaTeXDisplay math={line} />
+                    </div>
+                  ))}
               </div>
             ) : (
               <p className="text-muted-foreground italic text-sm bg-card/50 backdrop-blur-sm rounded p-2">
