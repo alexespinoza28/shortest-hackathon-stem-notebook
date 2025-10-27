@@ -2,18 +2,21 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { GripVertical, Trash2, Wand2 } from "lucide-react"
+import { evaluateMathExpression } from "@/lib/math-evaluator"
 
 interface EquationBlockProps {
   id: string
   initialContent?: string
+  showEvaluation: boolean
   position: { x: number; y: number }
   scale: number
   onUpdate: (id: string, content: string) => void
   onDelete: (id: string) => void
   onMove: (id: string, position: { x: number; y: number }) => void
   onScale: (id: string, scale: number) => void
+  onToggleEvaluation: (id: string, show: boolean) => void
 }
 
 function LaTeXDisplay({ math }: { math: string }) {
@@ -54,15 +57,39 @@ function LaTeXDisplay({ math }: { math: string }) {
   return <div ref={ref} className="text-lg" />
 }
 
+const latexToExpression = (input: string): string => {
+  if (!input) return input
+
+  let expr = input
+
+  expr = expr.replace(/\\frac\s*{([^}]*)}\s*{([^}]*)}/g, "($1)/($2)")
+  expr = expr.replace(/\\sqrt\s*{([^}]*)}/g, "sqrt($1)")
+  expr = expr.replace(/\\left|\\right/g, "")
+  expr = expr.replace(/\\cdot/g, "*")
+  expr = expr.replace(/\\times/g, "*")
+  expr = expr.replace(/\\div/g, "/")
+  expr = expr.replace(/\\pi/g, "pi")
+  expr = expr.replace(/\\tau/g, "(2*pi)")
+  expr = expr.replace(/\\mathrm{([^}]*)}/g, "$1")
+  expr = expr.replace(/\\!/g, "")
+  expr = expr.replace(/\\,|\\;|\\:|\\quad|\\qquad/g, "")
+  expr = expr.replace(/\\([a-zA-Z]+)/g, (_, command: string) => command)
+  expr = expr.replace(/{/g, "(").replace(/}/g, ")")
+
+  return expr
+}
+
 export function EquationBlock({
   id,
   initialContent = "",
+  showEvaluation,
   position,
   scale,
   onUpdate,
   onDelete,
   onMove,
   onScale,
+  onToggleEvaluation,
 }: EquationBlockProps) {
   const [content, setContent] = useState(initialContent)
   const [isEditing, setIsEditing] = useState(!initialContent)
@@ -71,6 +98,7 @@ export function EquationBlock({
   const [isAdjustingSpacing, setIsAdjustingSpacing] = useState(false)
   const [lineSpacing, setLineSpacing] = useState(2) // gap in pixels, start small
   const [isConverting, setIsConverting] = useState(false)
+  const [isEvaluationVisible, setIsEvaluationVisible] = useState(showEvaluation)
   const blockRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{
@@ -84,6 +112,28 @@ export function EquationBlock({
   const spacingRef = useRef<{ startY: number; startSpacing: number } | null>(null)
   const dragHandleRef = useRef<HTMLDivElement>(null)
   const originalContentRef = useRef(initialContent)
+
+  useEffect(() => {
+    setIsEvaluationVisible(showEvaluation)
+  }, [showEvaluation])
+
+  const primaryLine = useMemo(() => {
+    const first = content.split("\n").find((line) => line.trim().length > 0)
+    return first ?? ""
+  }, [content])
+
+  const evaluationExpression = useMemo(() => {
+    if (!primaryLine.trim()) return ""
+    if (primaryLine.includes("\\")) {
+      return latexToExpression(primaryLine)
+    }
+    return primaryLine
+  }, [primaryLine])
+
+  const evaluationResult = useMemo(() => {
+    if (!evaluationExpression.trim()) return null
+    return evaluateMathExpression(evaluationExpression)
+  }, [evaluationExpression])
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -201,6 +251,12 @@ export function EquationBlock({
     const newContent = e.target.value
     setContent(newContent)
     onUpdate(id, newContent)
+  }
+
+  const handleEvaluationToggle = () => {
+    const next = !isEvaluationVisible
+    setIsEvaluationVisible(next)
+    onToggleEvaluation(id, next)
   }
 
   // Check if text looks like LaTeX (has common LaTeX commands)
@@ -456,27 +512,66 @@ export function EquationBlock({
             </p>
           </div>
         ) : (
-          <div
-            onMouseDown={handleMouseDown}
-            className="cursor-move hover:bg-accent/30 rounded-lg p-2 transition-colors select-none"
-          >
-            {content ? (
-              <div className="flex flex-col items-start">
-                {content
-                  .split("\n")
-                  .filter((line) => line.trim())
-                  .map((line, idx) => (
-                    <div key={idx} style={{ marginTop: idx === 0 ? 0 : `${lineSpacing}px` }}>
-                      <LaTeXDisplay math={line} />
-                    </div>
-                  ))}
+          <>
+            <div
+              onMouseDown={handleMouseDown}
+              className="cursor-move hover:bg-accent/30 rounded-lg p-2 transition-colors select-none"
+            >
+              {content ? (
+                <div className="flex flex-col items-start">
+                  {content
+                    .split("\n")
+                    .filter((line) => line.trim())
+                    .map((line, idx) => (
+                      <div key={idx} style={{ marginTop: idx === 0 ? 0 : `${lineSpacing}px` }}>
+                        <LaTeXDisplay math={line} />
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground italic text-sm bg-card/50 backdrop-blur-sm rounded p-2">
+                  Click to add equation
+                </p>
+              )}
+            </div>
+
+            {evaluationExpression.trim() && (
+              <div
+                className="mt-2 rounded-lg border border-border bg-background/80 p-3 text-xs shadow-sm"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Evaluator
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleEvaluationToggle}
+                    className="rounded-full border border-border bg-card px-2 py-1 text-[10px] font-medium text-foreground transition hover:border-primary hover:text-primary"
+                  >
+                    {isEvaluationVisible ? "Hide answer" : "Show answer"}
+                  </button>
+                </div>
+                <p className="mt-2 font-mono text-[11px] text-muted-foreground break-all">
+                  {evaluationExpression}
+                </p>
+                {isEvaluationVisible && (
+                  <div className="mt-2 rounded-md bg-muted/40 px-3 py-2">
+                    {evaluationResult?.success ? (
+                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                        <span className="text-muted-foreground">=</span>
+                        <span>{evaluationResult.displayValue}</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-destructive">
+                        {evaluationResult?.error ?? "Unable to evaluate this expression."}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-            ) : (
-              <p className="text-muted-foreground italic text-sm bg-card/50 backdrop-blur-sm rounded p-2">
-                Click to add equation
-              </p>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

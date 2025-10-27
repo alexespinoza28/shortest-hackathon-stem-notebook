@@ -16,6 +16,7 @@ export interface Block {
   items?: { id: string; text: string; checked: boolean }[]
   position: { x: number; y: number }
   scale: number
+  showEvaluation?: boolean
 }
 
 // Page interface for multi-page notebooks

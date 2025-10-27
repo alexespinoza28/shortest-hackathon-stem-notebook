@@ -21,6 +21,10 @@ import {
   type Block,
 } from "@/lib/notebook-utils"
 
+const NOTEBOOK_LINE_SPACING = 40
+const NOTEBOOK_LINE_OFFSET = 39
+const SNAP_THRESHOLD_PX = 8
+
 interface TodoItem {
   id: string
   text: string
@@ -38,6 +42,22 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
   const [pages, setPages] = useState<NotebookPage[]>([])
   const [currentPageId, setCurrentPageId] = useState<string>("")
   const [isLoaded, setIsLoaded] = useState(false)
+  const [snapToLines, setSnapToLines] = useState(true)
+  const [snapGuideY, setSnapGuideY] = useState<number | null>(null)
+
+  const computeSnap = (y: number) => {
+    const snapped = Math.round((y - NOTEBOOK_LINE_OFFSET) / NOTEBOOK_LINE_SPACING) * NOTEBOOK_LINE_SPACING + NOTEBOOK_LINE_OFFSET
+    const safeValue = Math.max(0, snapped)
+    return {
+      snappedY: safeValue,
+      shouldSnap: Math.abs(safeValue - y) <= SNAP_THRESHOLD_PX,
+    }
+  }
+
+  const forceSnap = (y: number) => {
+    const snapped = Math.round((y - NOTEBOOK_LINE_OFFSET) / NOTEBOOK_LINE_SPACING) * NOTEBOOK_LINE_SPACING + NOTEBOOK_LINE_OFFSET
+    return Math.max(0, snapped)
+  }
 
   // Multi-select state
   const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(new Set())
@@ -65,6 +85,18 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     // Mark as loaded after attempting to load
     setIsLoaded(true)
   }, [notebookId])
+
+  useEffect(() => {
+    if (!snapToLines) {
+      setSnapGuideY(null)
+    }
+  }, [snapToLines])
+
+  useEffect(() => {
+    const clearGuide = () => setSnapGuideY(null)
+    window.addEventListener("mouseup", clearGuide)
+    return () => window.removeEventListener("mouseup", clearGuide)
+  }, [])
 
   // Auto-save blocks to current page whenever they change (but only after initial load)
   useEffect(() => {
@@ -142,13 +174,19 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
   }, [blocks, selectedBlocks, pages, currentPageId, pagesOpen])
 
   const handleInsert = (type: string) => {
+    const basePosition = { x: 100, y: 100 + blocks.length * 150 }
+    const targetPosition = snapToLines
+      ? { ...basePosition, y: forceSnap(basePosition.y) }
+      : basePosition
+
     const newBlock: Block = {
       id: `block-${Date.now()}`,
       type: type as "equation" | "text" | "todo",
       content: type !== "todo" ? "" : undefined,
       items: type === "todo" ? [{ id: "1", text: "", checked: false }] : undefined,
-      position: { x: 100, y: 100 + blocks.length * 150 },
+      position: targetPosition,
       scale: 1,
+      ...(type === "equation" ? { showEvaluation: false } : {}),
     }
     setBlocks([...blocks, newBlock])
   }
@@ -168,34 +206,56 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     )
   }
 
+  const handleEvaluationToggle = (id: string, show: boolean) => {
+    setBlocks(
+      blocks.map((block) => (block.id === id ? { ...block, showEvaluation: show } : block))
+    )
+  }
+
   const handleBlockDelete = (id: string) => {
     setBlocks(blocks.filter((block) => block.id !== id))
   }
 
   const handleBlockMove = (id: string, newPosition: { x: number; y: number }) => {
+    let targetPosition = newPosition
+
+    if (snapToLines) {
+      const snapInfo = computeSnap(newPosition.y)
+      if (snapInfo.shouldSnap) {
+        targetPosition = { ...newPosition, y: snapInfo.snappedY }
+        setSnapGuideY(snapInfo.snappedY)
+      } else {
+        setSnapGuideY(null)
+      }
+    } else {
+      setSnapGuideY(null)
+    }
+
     // If the moved block is selected, move all selected blocks
     if (selectedBlocks.has(id)) {
-      const movingBlock = blocks.find(b => b.id === id)
+      const movingBlock = blocks.find((b) => b.id === id)
       if (!movingBlock) return
 
-      const dx = newPosition.x - movingBlock.position.x
-      const dy = newPosition.y - movingBlock.position.y
+      const dx = targetPosition.x - movingBlock.position.x
+      const dy = targetPosition.y - movingBlock.position.y
 
-      setBlocks(blocks.map((block) => {
-        if (selectedBlocks.has(block.id)) {
-          return {
-            ...block,
-            position: {
-              x: block.position.x + dx,
-              y: block.position.y + dy,
-            },
+      setBlocks(
+        blocks.map((block) => {
+          if (selectedBlocks.has(block.id)) {
+            return {
+              ...block,
+              position: {
+                x: block.position.x + dx,
+                y: block.position.y + dy,
+              },
+            }
           }
-        }
-        return block
-      }))
+          return block
+        })
+      )
     } else {
       // Move single block
-      setBlocks(blocks.map((block) => (block.id === id ? { ...block, position: newPosition } : block)))
+      setBlocks(blocks.map((block) => (block.id === id ? { ...block, position: targetPosition } : block)))
     }
   }
 
@@ -234,10 +294,33 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     const initialPositions = new Map(
       blocks.filter(b => selectedBlocks.has(b.id)).map(b => [b.id, { ...b.position }])
     )
+    let anchorInitialY = Infinity
+    initialPositions.forEach((pos) => {
+      if (pos.y < anchorInitialY) {
+        anchorInitialY = pos.y
+      }
+    })
+    if (anchorInitialY === Infinity) {
+      anchorInitialY = 0
+    }
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const dx = moveEvent.clientX - startX
       const dy = moveEvent.clientY - startY
+      let dyAdjusted = dy
+
+      if (snapToLines) {
+        const targetY = anchorInitialY + dy
+        const snapInfo = computeSnap(targetY)
+        if (snapInfo.shouldSnap) {
+          dyAdjusted += snapInfo.snappedY - targetY
+          setSnapGuideY(snapInfo.snappedY)
+        } else {
+          setSnapGuideY(null)
+        }
+      } else {
+        setSnapGuideY(null)
+      }
 
       setBlocks(prevBlocks =>
         prevBlocks.map(block => {
@@ -248,7 +331,7 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                 ...block,
                 position: {
                   x: initial.x + dx,
-                  y: initial.y + dy,
+                  y: initial.y + dyAdjusted,
                 },
               }
             }
@@ -259,6 +342,7 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
     }
 
     const handleMouseUp = () => {
+      setSnapGuideY(null)
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
@@ -498,7 +582,11 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                 </span>
               </div>
             )}
-            <NotebookToolbar onInsert={handleInsert} />
+            <NotebookToolbar
+              onInsert={handleInsert}
+              snapToLines={snapToLines}
+              onToggleSnap={() => setSnapToLines((prev) => !prev)}
+            />
           </div>
           <Button
             variant={aiOpen ? "default" : "outline"}
@@ -524,12 +612,14 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                   const rect = e.currentTarget.getBoundingClientRect()
                   const x = e.clientX - rect.left
                   const y = e.clientY - rect.top
+                  const targetPosition = snapToLines ? { x, y: forceSnap(y) } : { x, y }
                   const newBlock: Block = {
                     id: `block-${Date.now()}`,
                     type: "equation",
                     content: "",
-                    position: { x, y },
+                    position: targetPosition,
                     scale: 1,
+                    showEvaluation: false,
                   }
                   setBlocks([...blocks, newBlock])
                 }
@@ -547,6 +637,13 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                   backgroundPosition: "0 0, 60px 0",
                 }}
               />
+
+              {snapToLines && snapGuideY !== null && (
+                <div
+                  className="absolute left-0 right-0 h-[2px] bg-primary/60 pointer-events-none z-40"
+                  style={{ top: `${snapGuideY}px` }}
+                />
+              )}
 
               {/* Selection box */}
               {isSelecting && selectionBox && (
@@ -661,12 +758,14 @@ export function NotebookCanvas({ notebookId = "default-notebook" }: NotebookCanv
                       key={block.id}
                       id={block.id}
                       initialContent={block.content || ""}
+                      showEvaluation={Boolean(block.showEvaluation)}
                       position={block.position}
                       scale={block.scale}
                       onUpdate={handleBlockUpdate}
                       onDelete={handleBlockDelete}
                       onMove={handleBlockMove}
                       onScale={handleBlockScale}
+                      onToggleEvaluation={handleEvaluationToggle}
                     />
                   )
                 } else if (block.type === "text") {
